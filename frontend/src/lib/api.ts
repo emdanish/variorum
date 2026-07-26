@@ -176,6 +176,65 @@ export interface PrBriefing {
   };
 }
 
+export interface SymbolHit {
+  name: string;
+  path: string;
+  kind: string;
+  language: string | null;
+}
+
+export interface DocumentHit {
+  path: string;
+  title: string | null;
+}
+
+export interface DecisionHit {
+  id: number;
+  title: string;
+  summary: string;
+  decided_at: string | null;
+}
+
+export interface KnowledgeHit {
+  kind: string;
+  source_ref: string;
+  title: string | null;
+  url: string | null;
+}
+
+export interface SearchResults {
+  query: string;
+  symbols: SymbolHit[];
+  documents: DocumentHit[];
+  decisions: DecisionHit[];
+  knowledge: KnowledgeHit[];
+  total: number;
+}
+
+export interface DigestReport {
+  days: number;
+  new_drift: number;
+  new_risk: number;
+  new_knowledge: number;
+  decisions_total: number;
+  health_score: number;
+  health_level: string;
+  single_owner_modules: number;
+  top_hotspots: Hotspot[];
+  recent_knowledge: KnowledgeHit[];
+  generated_at: string;
+}
+
+export interface ContradictionItem {
+  source: KnowledgeHit;
+  explanation: string;
+}
+
+export interface ContradictionReport {
+  pr_number: number;
+  contradictions: ContradictionItem[];
+}
+
 export interface TeamInsights {
   id: number;
   installation_id: number;
@@ -310,6 +369,12 @@ export const api = {
     request<Decision[]>(`/api/v1/repositories/${id}/decisions`, { method: "POST" }),
   prBriefing: (id: number, prNumber: number) =>
     request<PrBriefing>(`/api/v1/repositories/${id}/pr-briefing/${prNumber}`),
+  search: (id: number, q: string) =>
+    request<SearchResults>(`/api/v1/repositories/${id}/search?q=${encodeURIComponent(q)}`),
+  digest: (id: number, days = 7) =>
+    request<DigestReport>(`/api/v1/repositories/${id}/digest?days=${days}`),
+  contradictions: (id: number, prNumber: number) =>
+    request<ContradictionReport>(`/api/v1/repositories/${id}/contradictions/${prNumber}`),
   teams: () => request<TeamInsights[]>("/api/v1/teams"),
   connectRepository: (id: number) =>
     request<Repository>(`/api/v1/repositories/${id}/connect`, { method: "POST" }),

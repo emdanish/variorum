@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { GitPullRequest, Loader2, ShieldAlert } from "lucide-react";
+import { AlertTriangle, GitPullRequest, Loader2, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { api, type PrBriefing } from "@/lib/api";
+import { api, type ContradictionItem, type PrBriefing } from "@/lib/api";
 import { ghBlobUrl } from "@/lib/utils";
 
 type Tone = "danger" | "warning" | "primary" | "outline";
@@ -31,17 +31,38 @@ export function PrBriefingPanel({
   const [value, setValue] = useState("");
   const [loading, setLoading] = useState(false);
   const [briefing, setBriefing] = useState<PrBriefing | null>(null);
+  const [analyzedPr, setAnalyzedPr] = useState<number | null>(null);
+  const [checkingContra, setCheckingContra] = useState(false);
+  const [contradictions, setContradictions] = useState<ContradictionItem[] | null>(null);
 
   const run = async () => {
     const n = parseInt(value, 10);
     if (Number.isNaN(n) || n <= 0) return;
     setLoading(true);
+    setContradictions(null);
     try {
       setBriefing(await api.prBriefing(repoId, n));
+      setAnalyzedPr(n);
     } catch (e) {
       toast.error("Couldn't build the briefing", { description: (e as Error).message });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkContradictions = async () => {
+    if (analyzedPr === null) return;
+    setCheckingContra(true);
+    try {
+      const res = await api.contradictions(repoId, analyzedPr);
+      setContradictions(res.contradictions);
+      if (res.contradictions.length === 0) {
+        toast.success("No contradictions with recorded decisions");
+      }
+    } catch (e) {
+      toast.error("Couldn't check contradictions", { description: (e as Error).message });
+    } finally {
+      setCheckingContra(false);
     }
   };
 
@@ -140,6 +161,62 @@ export function PrBriefingPanel({
                 </li>
               ))}
             </ul>
+
+            <div className="mt-4 border-t border-border pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">
+                  Does this PR contradict a recorded decision?
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={checkingContra}
+                  onClick={() => void checkContradictions()}
+                >
+                  {checkingContra ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking…
+                    </>
+                  ) : (
+                    "Check contradictions"
+                  )}
+                </Button>
+              </div>
+              {contradictions !== null &&
+                (contradictions.length === 0 ? (
+                  <p className="mt-2 text-xs text-success">
+                    No contradictions with recorded decisions.
+                  </p>
+                ) : (
+                  <ul className="mt-2 space-y-2">
+                    {contradictions.map((c, i) => (
+                      <li
+                        key={i}
+                        className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-2.5 text-xs"
+                      >
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                        <span>
+                          {c.explanation}{" "}
+                          {c.source.url ? (
+                            <a
+                              href={c.source.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-mono text-primary hover:underline"
+                            >
+                              ({c.source.kind.replace("_", " ")} {c.source.source_ref})
+                            </a>
+                          ) : (
+                            <span className="font-mono text-muted-foreground">
+                              ({c.source.kind.replace("_", " ")} {c.source.source_ref})
+                            </span>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ))}
+            </div>
           </>
         )}
       </CardContent>
