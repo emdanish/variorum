@@ -51,7 +51,10 @@ async def github_callback(
         gh_user = await oauth.fetch_user(token)
     except GitHubOAuthError as exc:
         logger.warning("oauth callback failed: %s", exc)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GitHub sign-in failed. Please try again.",
+        ) from exc
 
     user = upsert_user_from_github(db, gh_user)
     request.session["user_id"] = user.id

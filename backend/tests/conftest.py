@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+
+# Disable abuse rate limiting before any app module (and its cached settings)
+# is imported, so repeated requests across the suite never trip the limiter.
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
+from collections.abc import Iterator  # noqa: E402
 
 import pytest
 from sqlalchemy import create_engine, text

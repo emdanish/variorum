@@ -19,6 +19,20 @@ def _encode_path(path: str) -> str:
     return quote(path, safe="/")
 
 
+def _safe_repo_path(path: str) -> str:
+    """Reject path-traversal / absolute paths before addressing a repo file.
+
+    Repo file paths flow from GitHub-indexed content, not from AI or end users,
+    so this is defense-in-depth — it guarantees a generated write can never
+    escape the repository tree.
+    """
+    normalized = path.strip().lstrip("/")
+    segments = normalized.split("/")
+    if not normalized or any(seg in ("..", "") for seg in segments):
+        raise ValueError(f"unsafe repository path: {path!r}")
+    return normalized
+
+
 @dataclass
 class InstallationAccount:
     installation_id: int
@@ -225,6 +239,7 @@ class GitHubClient:
         branch: str,
         sha: str | None = None,
     ) -> None:
+        safe_path = _safe_repo_path(path)
         headers = await self._installation_headers(installation_id)
         body: dict = {
             "message": message,
@@ -235,7 +250,7 @@ class GitHubClient:
             body["sha"] = sha
         async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
             resp = await client.put(
-                f"{GITHUB_API}/repos/{full_name}/contents/{_encode_path(path)}",
+                f"{GITHUB_API}/repos/{full_name}/contents/{_encode_path(safe_path)}",
                 headers=headers,
                 json=body,
             )

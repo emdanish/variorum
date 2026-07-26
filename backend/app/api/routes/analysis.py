@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.base import AllProvidersFailedError
 from app.api.deps import get_ai_service, get_current_user, get_db, get_github_auth
+from app.core.logging import get_logger
 from app.models import (
     AnalysisJob,
     DriftFinding,
@@ -20,6 +21,8 @@ from app.schemas import FindingResponse, GeneratedPRResponse, JobDetail, RiskFin
 from app.services.analysis.doc_pr import create_doc_fix_pr
 from app.services.analysis.test_pr import create_test_pr
 from app.services.github.client import GitHubClient
+
+logger = get_logger("variorum.analysis")
 
 jobs_router = APIRouter(prefix="/jobs", tags=["analysis"])
 findings_router = APIRouter(prefix="/findings", tags=["analysis"])
@@ -170,15 +173,20 @@ async def open_doc_fix_pr(
     try:
         result = await create_doc_fix_pr(db, finding, client=client, ai=ai)
     except AllProvidersFailedError as exc:
+        logger.warning("doc-fix AI generation failed finding=%s: %s", finding.id, exc)
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI generation failed: {exc}"
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI generation is unavailable right now. Please try again.",
         ) from exc
     except httpx.HTTPStatusError as exc:
+        logger.warning("doc-fix GitHub error finding=%s: %s", finding.id, exc)
         detail = f"GitHub API error ({exc.response.status_code}). Check the App's permissions."
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc
     except httpx.HTTPError as exc:
+        logger.warning("doc-fix GitHub request failed finding=%s: %s", finding.id, exc)
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"GitHub request failed: {exc}"
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The GitHub request failed. Please try again.",
         ) from exc
 
     if result is None:
@@ -226,15 +234,20 @@ async def generate_tests(
     try:
         result = await create_test_pr(db, finding, client=client, ai=ai)
     except AllProvidersFailedError as exc:
+        logger.warning("test-gen AI generation failed finding=%s: %s", finding.id, exc)
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI generation failed: {exc}"
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI generation is unavailable right now. Please try again.",
         ) from exc
     except httpx.HTTPStatusError as exc:
+        logger.warning("test-gen GitHub error finding=%s: %s", finding.id, exc)
         detail = f"GitHub API error ({exc.response.status_code}). Check the App's permissions."
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc
     except httpx.HTTPError as exc:
+        logger.warning("test-gen GitHub request failed finding=%s: %s", finding.id, exc)
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"GitHub request failed: {exc}"
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The GitHub request failed. Please try again.",
         ) from exc
 
     if result is None:

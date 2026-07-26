@@ -6,6 +6,9 @@ from typing import Annotated
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+DEFAULT_SESSION_SECRET = "dev-insecure-session-secret-change-me"
+DEFAULT_DATABASE_URL = "postgresql+psycopg://variorum:variorum@localhost:5432/variorum"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -21,7 +24,10 @@ class Settings(BaseSettings):
     backend_port: int = 8000
     backend_public_url: str = "http://localhost:8000"
     frontend_url: str = "http://localhost:3000"
-    session_secret: str = "dev-insecure-session-secret-change-me"
+    session_secret: str = DEFAULT_SESSION_SECRET
+    # Abuse protection on auth / webhook / AI endpoints. Disabled in the test
+    # suite so repeated calls don't trip the limiter.
+    rate_limit_enabled: bool = True
 
     # NoDecode stops pydantic-settings from JSON-parsing the env value; the
     # validator below accepts a comma-separated string or a real list.
@@ -29,7 +35,7 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000"]
     )
 
-    database_url: str = "postgresql+psycopg://variorum:variorum@localhost:5432/variorum"
+    database_url: str = DEFAULT_DATABASE_URL
 
     gemini_api_key_1: str = ""
     gemini_api_key_2: str = ""
@@ -58,6 +64,31 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment.lower() in {"production", "prod"}
+
+    def production_security_issues(self) -> list[str]:
+        """Return misconfigurations that must be fixed before a production launch.
+
+        Empty list means the security-critical config is sound. Callers should
+        refuse to start (or loudly warn) in production when this is non-empty.
+        """
+        issues: list[str] = []
+        if not self.session_secret or self.session_secret == DEFAULT_SESSION_SECRET:
+            issues.append(
+                "SESSION_SECRET must be set to a strong random value (it signs auth "
+                "session cookies)."
+            )
+        if not self.github_webhook_secret:
+            issues.append(
+                "GITHUB_WEBHOOK_SECRET must be set so inbound webhooks can be verified."
+            )
+        if self.database_url == DEFAULT_DATABASE_URL:
+            issues.append("DATABASE_URL must not use the default local dev credentials.")
+        if not self.cors_origins or "*" in self.cors_origins:
+            issues.append(
+                "CORS_ORIGINS must be an explicit allowlist of frontend URLs, never '*' "
+                "(credentials are sent with cross-origin requests)."
+            )
+        return issues
 
 
 @lru_cache

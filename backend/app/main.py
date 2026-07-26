@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.ai.service import get_ai_service
@@ -9,23 +10,33 @@ from app.api.router import api_router
 from app.api.routes import webhooks
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
+from app.core.ratelimit import rate_limit_middleware
 from app.schemas import HealthResponse
 
 logger = get_logger("variorum")
+
+# Baseline hardening headers applied to every response. HSTS is added
+# separately, and only in production, since it should never be sent over http.
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+}
 
 
 def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
 
-    _DEFAULT_SESSION_SECRET = "dev-insecure-session-secret-change-me"
-    if settings.is_production and (
-        not settings.session_secret or settings.session_secret == _DEFAULT_SESSION_SECRET
-    ):
+    issues = settings.production_security_issues()
+    if settings.is_production and issues:
         raise RuntimeError(
-            "SESSION_SECRET must be set to a strong random value in production "
-            "(it signs auth session cookies)."
+            "Refusing to start in production with insecure configuration:\n- "
+            + "\n- ".join(issues)
         )
+    for issue in issues:
+        logger.warning("insecure config (allowed outside production): %s", issue)
 
     app = FastAPI(
         title=f"{settings.app_name} API",
@@ -46,6 +57,29 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def _security_headers(request: Request, call_next):
+        response = await call_next(request)
+        for header, value in _SECURITY_HEADERS.items():
+            response.headers.setdefault(header, value)
+        if settings.is_production:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
+            )
+        return response
+
+    if settings.rate_limit_enabled:
+        app.middleware("http")(rate_limit_middleware)
+
+    @app.exception_handler(Exception)
+    async def _unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
+        # Log the full detail server-side; never leak internals to the client.
+        logger.exception("unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "An unexpected error occurred. Please try again."},
+        )
 
     app.include_router(api_router)
     app.include_router(webhooks.router)

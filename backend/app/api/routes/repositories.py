@@ -282,8 +282,10 @@ async def ask(
     try:
         result = await answer_question(ai, question, entries)
     except AllProvidersFailedError as exc:
+        logger.warning("ask AI request failed repo=%s: %s", repo.id, exc)
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI request failed: {exc}"
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI is unavailable right now. Please try again.",
         ) from exc
 
     return AskResponse(
