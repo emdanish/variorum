@@ -106,6 +106,17 @@ class AnalyzePrResponse(BaseModel):
     pr_number: int
 
 
+class IngestResponse(BaseModel):
+    status: str
+    repository_id: int
+
+
+class KnowledgeStats(BaseModel):
+    total: int
+    by_kind: dict[str, int]
+    last_occurred_at: datetime | None = None
+
+
 class GitHubAppStatus(BaseModel):
     app_id: bool = False
     private_key: bool = False

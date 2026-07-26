@@ -14,6 +14,7 @@ from app.models import (
     DriftFinding,
     GitHubInstallation,
     IndexingStatus,
+    KnowledgeEntry,
     Repository,
     User,
 )
@@ -21,11 +22,14 @@ from app.schemas import (
     AnalyzePrRequest,
     AnalyzePrResponse,
     FindingResponse,
+    IngestResponse,
     JobResponse,
+    KnowledgeStats,
     RepositoryDetail,
     RepositoryResponse,
 )
 from app.workers.indexing import run_index_job
+from app.workers.ingest import run_ingest_history_job
 from app.workers.pr_analysis import run_pr_analysis_job
 
 logger = get_logger("variorum.repositories")
@@ -159,6 +163,41 @@ def analyze_pr(
     )
     logger.info("manual PR analysis queued repo=%s pr=%s", repo.full_name, payload.pr_number)
     return AnalyzePrResponse(status="queued", repository_id=repo.id, pr_number=payload.pr_number)
+
+
+@router.post("/{repo_id}/ingest-history", response_model=IngestResponse, status_code=202)
+def ingest_history(
+    repo_id: int,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> IngestResponse:
+    """Ingest commit / PR / issue history into the engineering-memory store."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    background_tasks.add_task(run_ingest_history_job, repo.id)
+    logger.info("history ingestion queued repo=%s", repo.full_name)
+    return IngestResponse(status="queued", repository_id=repo.id)
+
+
+@router.get("/{repo_id}/knowledge/stats", response_model=KnowledgeStats)
+def knowledge_stats(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> KnowledgeStats:
+    repo = _get_owned_repo(db, user.id, repo_id)
+    rows = db.execute(
+        select(KnowledgeEntry.kind, func.count())
+        .where(KnowledgeEntry.repository_id == repo.id)
+        .group_by(KnowledgeEntry.kind)
+    ).all()
+    by_kind = {kind.value: count for kind, count in rows}
+    last = db.scalar(
+        select(func.max(KnowledgeEntry.occurred_at)).where(
+            KnowledgeEntry.repository_id == repo.id
+        )
+    )
+    return KnowledgeStats(total=sum(by_kind.values()), by_kind=by_kind, last_occurred_at=last)
 
 
 @router.post("/{repo_id}/connect", response_model=RepositoryResponse)

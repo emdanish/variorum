@@ -87,6 +87,54 @@ def test_query_params_json_available():
     assert json.loads(json.dumps({"ok": True})) == {"ok": True}
 
 
+async def test_history_methods(monkeypatch):
+    from app.services.github.auth import InstallationToken
+
+    auth = _auth()
+
+    async def fake_token(_id):
+        return InstallationToken(token="tok", expires_at="2099-01-01T00:00:00Z")
+
+    monkeypatch.setattr(auth, "get_installation_token", fake_token)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/commits"):
+            return httpx.Response(200, json=[
+                {
+                    "sha": "abc",
+                    "html_url": "u/c",
+                    "commit": {
+                        "message": "Add auth\n\ndetail",
+                        "author": {"name": "a", "date": "2026-01-01T00:00:00Z"},
+                    },
+                    "author": {"login": "alice"},
+                },
+            ])
+        if path.endswith("/pulls"):
+            return httpx.Response(200, json=[
+                {"number": 7, "title": "JWT", "body": "d", "html_url": "u/p",
+                 "user": {"login": "bob"}, "created_at": "2026-02-01T00:00:00Z"},
+            ])
+        if path.endswith("/issues"):
+            return httpx.Response(200, json=[
+                {"number": 9, "title": "bug", "body": "r", "html_url": "u/i",
+                 "user": {"login": "carol"}, "created_at": "2026-03-01T00:00:00Z"},
+                {"number": 10, "title": "actually a PR", "pull_request": {"url": "x"}},
+            ])
+        return httpx.Response(404, json=[])
+
+    client = GitHubClient(auth, transport=httpx.MockTransport(handler))
+    commits = await client.list_commits(1, "acme/app")
+    prs = await client.list_pull_requests(1, "acme/app")
+    issues = await client.list_issues(1, "acme/app")
+
+    assert len(commits) == 1 and commits[0].title == "Add auth" and commits[0].author == "alice"
+    assert len(prs) == 1 and prs[0].source_ref == "7"
+    # issue #10 is a PR and must be filtered out
+    assert [i.source_ref for i in issues] == ["9"]
+
+
 async def test_write_ops_shapes(monkeypatch):
     import base64
 

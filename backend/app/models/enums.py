@@ -50,3 +50,10 @@ class FindingStatus(enum.StrEnum):
     detected = "detected"
     pr_opened = "pr_opened"
     dismissed = "dismissed"
+
+
+class KnowledgeKind(enum.StrEnum):
+    commit = "commit"
+    pull_request = "pull_request"
+    issue = "issue"
+    review = "review"

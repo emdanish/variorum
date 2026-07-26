@@ -13,9 +13,11 @@ from app.models.enums import (
     JobStatus,
     JobTrigger,
     JobType,
+    KnowledgeKind,
     LinkSource,
 )
 from app.models.github import GitHubInstallation, Repository
+from app.models.knowledge import KnowledgeEntry
 from app.models.user import User
 
 __all__ = [
@@ -33,6 +35,8 @@ __all__ = [
     "JobStatus",
     "JobTrigger",
     "JobType",
+    "KnowledgeEntry",
+    "KnowledgeKind",
     "LinkSource",
     "ProviderCall",
     "Repository",

@@ -50,6 +50,17 @@ class PullRequestResult:
     url: str
 
 
+@dataclass
+class HistoryItem:
+    kind: str  # one of KnowledgeKind values
+    source_ref: str
+    title: str | None
+    body: str | None
+    url: str | None
+    author: str | None
+    occurred_at: str | None  # ISO 8601; parsed by the ingestion service
+
+
 class GitHubClient:
     """Installation-scoped GitHub REST client. Authenticates as the App (JWT) for
     App-level reads and mints short-lived installation tokens for repository
@@ -250,6 +261,94 @@ class GitHubClient:
         resp.raise_for_status()
         data = resp.json()
         return PullRequestResult(number=data["number"], url=data["html_url"])
+
+    async def _paginate(
+        self, installation_id: int, path: str, params: dict, max_items: int
+    ) -> list[dict]:
+        headers = await self._installation_headers(installation_id)
+        items: list[dict] = []
+        page = 1
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            while len(items) < max_items:
+                resp = await client.get(
+                    f"{GITHUB_API}{path}",
+                    headers=headers,
+                    params={**params, "per_page": 100, "page": page},
+                )
+                resp.raise_for_status()
+                batch = resp.json()
+                if not isinstance(batch, list) or not batch:
+                    break
+                items.extend(batch)
+                if len(batch) < 100:
+                    break
+                page += 1
+        return items[:max_items]
+
+    async def list_commits(
+        self, installation_id: int, full_name: str, *, max_items: int = 100
+    ) -> list[HistoryItem]:
+        raw = await self._paginate(
+            installation_id, f"/repos/{full_name}/commits", {}, max_items
+        )
+        out: list[HistoryItem] = []
+        for c in raw:
+            commit = c.get("commit") or {}
+            author = commit.get("author") or {}
+            message = commit.get("message") or ""
+            out.append(
+                HistoryItem(
+                    kind="commit",
+                    source_ref=c.get("sha", ""),
+                    title=(message.splitlines()[0][:1024] if message else None),
+                    body=message or None,
+                    url=c.get("html_url"),
+                    author=(c.get("author") or {}).get("login") or author.get("name"),
+                    occurred_at=author.get("date"),
+                )
+            )
+        return out
+
+    async def list_pull_requests(
+        self, installation_id: int, full_name: str, *, max_items: int = 50
+    ) -> list[HistoryItem]:
+        raw = await self._paginate(
+            installation_id, f"/repos/{full_name}/pulls", {"state": "all"}, max_items
+        )
+        return [
+            HistoryItem(
+                kind="pull_request",
+                source_ref=str(p["number"]),
+                title=p.get("title"),
+                body=p.get("body"),
+                url=p.get("html_url"),
+                author=(p.get("user") or {}).get("login"),
+                occurred_at=p.get("created_at"),
+            )
+            for p in raw
+        ]
+
+    async def list_issues(
+        self, installation_id: int, full_name: str, *, max_items: int = 50
+    ) -> list[HistoryItem]:
+        raw = await self._paginate(
+            installation_id, f"/repos/{full_name}/issues", {"state": "all"}, max_items
+        )
+        # The issues endpoint also returns PRs; skip those (they have a
+        # `pull_request` field) since PRs are ingested separately.
+        return [
+            HistoryItem(
+                kind="issue",
+                source_ref=str(i["number"]),
+                title=i.get("title"),
+                body=i.get("body"),
+                url=i.get("html_url"),
+                author=(i.get("user") or {}).get("login"),
+                occurred_at=i.get("created_at"),
+            )
+            for i in raw
+            if "pull_request" not in i
+        ]
 
     async def find_open_pull_request(
         self, installation_id: int, full_name: str, head_branch: str
