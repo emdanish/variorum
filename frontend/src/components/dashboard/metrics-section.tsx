@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   BookOpen,
+  ChevronDown,
   Flame,
   Gauge,
+  HelpCircle,
   Lightbulb,
   Loader2,
   RefreshCw,
@@ -23,7 +25,7 @@ import {
   type Hotspot,
   type OwnershipReport,
 } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, ghBlobUrl, ghTreeUrl } from "@/lib/utils";
 
 type Tone = "danger" | "warning" | "primary" | "outline" | "success";
 
@@ -48,8 +50,20 @@ const SUBSCORE_LABELS: Record<string, string> = {
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-// Progressive re-fetch schedule while a background ingestion runs.
 const POLL_DELAYS = [4000, 5000, 6000, 8000, 10000, 12000, 15000];
+
+const LEGEND: { term: string; meaning: string }[] = [
+  { term: "Hotspot score (0–100)", meaning: "Change risk from churn, change frequency, bug-fix history, and missing tests. Higher = riskier." },
+  { term: "churn", meaning: "Total lines added + deleted across the collected history." },
+  { term: "changes", meaning: "Number of commits that touched the file." },
+  { term: "authors", meaning: "Distinct people who changed the file." },
+  { term: "fixes", meaning: "Commits whose message looks like a bug fix." },
+  { term: "no tests", meaning: "No matching test file was found for this source file." },
+  { term: "bus factor", meaning: "How many people you'd need to lose before a module's knowledge is at risk. 1 = one person holds it." },
+  { term: "at risk (ownership)", meaning: "One author wrote ≥80% of a module (or is its only author)." },
+  { term: "doc coverage", meaning: "Share of source files that have documentation linked to them." },
+  { term: "knowledge health", meaning: "Composite of documentation, doc coverage, test risk, and ownership." },
+];
 
 function Recommendation({ children }: { children: React.ReactNode }) {
   return (
@@ -60,9 +74,18 @@ function Recommendation({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function MetricsSection({ repoId }: { repoId: number }) {
+export function MetricsSection({
+  repoId,
+  repoFullName,
+  defaultBranch,
+}: {
+  repoId: number;
+  repoFullName: string;
+  defaultBranch: string;
+}) {
   const [loading, setLoading] = useState(true);
   const [ingesting, setIngesting] = useState(false);
+  const [showLegend, setShowLegend] = useState(false);
   const [health, setHealth] = useState<HealthScore | null>(null);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
   const [ownership, setOwnership] = useState<OwnershipReport | null>(null);
@@ -75,6 +98,15 @@ export function MetricsSection({ repoId }: { repoId: number }) {
       mounted.current = false;
     };
   }, []);
+
+  const fileUrl = useCallback(
+    (path: string) => ghBlobUrl(repoFullName, defaultBranch, path),
+    [repoFullName, defaultBranch],
+  );
+  const moduleUrl = useCallback(
+    (module: string) => ghTreeUrl(repoFullName, defaultBranch, module),
+    [repoFullName, defaultBranch],
+  );
 
   const load = useCallback(async () => {
     const [h, hs, own, cov] = await Promise.all([
@@ -103,7 +135,6 @@ export function MetricsSection({ repoId }: { repoId: number }) {
       toast.success("Collecting repository history…", {
         description: "Hotspots and ownership will populate shortly.",
       });
-      // Poll until churn data appears (or the schedule is exhausted).
       for (const delay of POLL_DELAYS) {
         await sleep(delay);
         if (!mounted.current) return;
@@ -128,9 +159,12 @@ export function MetricsSection({ repoId }: { repoId: number }) {
     <div className="mt-8">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-semibold tracking-tight">Engineering intelligence</h2>
-        <span className="text-xs text-muted-foreground">
-          longitudinal signals from this repository&apos;s history
-        </span>
+        <button
+          onClick={() => setShowLegend((v) => !v)}
+          className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <HelpCircle className="h-3.5 w-3.5" /> What do these mean?
+        </button>
         <Button
           variant="outline"
           size="sm"
@@ -150,26 +184,61 @@ export function MetricsSection({ repoId }: { repoId: number }) {
         </Button>
       </div>
 
+      {showLegend && (
+        <Card className="mb-4">
+          <CardContent className="grid gap-x-6 gap-y-2 py-4 sm:grid-cols-2">
+            {LEGEND.map((l) => (
+              <div key={l.term} className="text-xs">
+                <span className="font-medium">{l.term}</span>
+                <span className="text-muted-foreground"> — {l.meaning}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-3">
         {health && <HealthCard health={health} />}
         <div className="lg:col-span-2">
-          <HotspotsCard hotspots={hotspots} hasChurn={hasChurn} ingesting={ingesting} />
+          <HotspotsCard
+            hotspots={hotspots}
+            hasChurn={hasChurn}
+            ingesting={ingesting}
+            fileUrl={fileUrl}
+          />
         </div>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <OwnershipCard ownership={ownership} hasChurn={hasChurn} ingesting={ingesting} />
-        <CoverageCard coverage={coverage} />
+        <OwnershipCard
+          ownership={ownership}
+          hasChurn={hasChurn}
+          ingesting={ingesting}
+          moduleUrl={moduleUrl}
+        />
+        <CoverageCard coverage={coverage} moduleUrl={moduleUrl} />
       </div>
     </div>
   );
 }
 
+function FileLink({ path, url }: { path: string; url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      title={`Open ${path} on GitHub`}
+      className="min-w-0 flex-1 truncate font-mono text-xs hover:text-primary hover:underline"
+    >
+      {path}
+    </a>
+  );
+}
+
 function HealthCard({ health }: { health: HealthScore }) {
   const entries = Object.entries(health.subscores);
-  const weakest = entries.length
-    ? entries.reduce((a, b) => (b[1] < a[1] ? b : a))
-    : null;
+  const weakest = entries.length ? entries.reduce((a, b) => (b[1] < a[1] ? b : a)) : null;
   return (
     <Card>
       <CardHeader>
@@ -224,17 +293,27 @@ function HotspotsCard({
   hotspots,
   hasChurn,
   ingesting,
+  fileUrl,
 }: {
   hotspots: Hotspot[];
   hasChurn: boolean;
   ingesting: boolean;
+  fileUrl: (path: string) => string;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const untested = hotspots.filter((h) => !h.has_tests);
+  const shown = expanded ? hotspots : hotspots.slice(0, 8);
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Flame className="h-4 w-4 text-danger" /> Change risk hotspots
+          {hotspots.length > 0 && (
+            <span className="ml-auto text-xs font-normal text-muted-foreground">
+              {hotspots.length} files
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -243,10 +322,10 @@ function HotspotsCard({
         ) : (
           <>
             <ul className="divide-y divide-border">
-              {hotspots.slice(0, 8).map((h) => (
+              {shown.map((h) => (
                 <li key={h.path} className="flex items-center gap-3 py-2">
                   <Badge tone={levelTone(h.level)}>{h.score}</Badge>
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs">{h.path}</span>
+                  <FileLink path={h.path} url={fileUrl(h.path)} />
                   <span className="hidden shrink-0 gap-3 text-xs text-muted-foreground sm:flex">
                     <span title="commits touching this file">{h.changes} changes</span>
                     <span title="lines changed">{h.churn} churn</span>
@@ -261,9 +340,18 @@ function HotspotsCard({
                 </li>
               ))}
             </ul>
+            {hotspots.length > 8 && (
+              <button
+                onClick={() => setExpanded((v) => !v)}
+                className="mt-2 flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} />
+                {expanded ? "Show fewer" : `Show all ${hotspots.length}`}
+              </button>
+            )}
             {untested.length > 0 ? (
               <Recommendation>
-                {untested.length} of your top hotspots have no tests. Start with{" "}
+                {untested.length} of these {hotspots.length} hotspots have no tests. Start with{" "}
                 <span className="font-mono">{untested[0].path}</span> — add coverage there (Variorum
                 can open a test PR from its risk finding).
               </Recommendation>
@@ -284,12 +372,18 @@ function OwnershipCard({
   ownership,
   hasChurn,
   ingesting,
+  moduleUrl,
 }: {
   ownership: OwnershipReport | null;
   hasChurn: boolean;
   ingesting: boolean;
+  moduleUrl: (module: string) => string;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const atRisk = ownership?.modules.filter((m) => m.single_owner) ?? [];
+  const modules = ownership?.modules ?? [];
+  const shown = expanded ? modules : modules.slice(0, 8);
+
   return (
     <Card>
       <CardHeader>
@@ -308,18 +402,35 @@ function OwnershipCard({
         ) : (
           <>
             <ul className="divide-y divide-border">
-              {ownership.modules.slice(0, 8).map((m) => (
+              {shown.map((m) => (
                 <li key={m.module} className="flex items-center gap-3 py-2 text-sm">
                   <Badge tone={m.single_owner ? "warning" : "outline"}>
                     bus factor {m.bus_factor}
                   </Badge>
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs">{m.module}</span>
+                  <a
+                    href={moduleUrl(m.module)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`Open ${m.module} on GitHub`}
+                    className="min-w-0 flex-1 truncate font-mono text-xs hover:text-primary hover:underline"
+                  >
+                    {m.module}
+                  </a>
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {m.primary_owner} · {Math.round(m.primary_share * 100)}%
                   </span>
                 </li>
               ))}
             </ul>
+            {modules.length > 8 && (
+              <button
+                onClick={() => setExpanded((v) => !v)}
+                className="mt-2 flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} />
+                {expanded ? "Show fewer" : `Show all ${modules.length}`}
+              </button>
+            )}
             {atRisk.length > 0 ? (
               <Recommendation>
                 <span className="font-mono">{atRisk[0].module}</span> is single-owner (
@@ -338,7 +449,13 @@ function OwnershipCard({
   );
 }
 
-function CoverageCard({ coverage }: { coverage: DocCoverageReport | null }) {
+function CoverageCard({
+  coverage,
+  moduleUrl,
+}: {
+  coverage: DocCoverageReport | null;
+  moduleUrl: (module: string) => string;
+}) {
   if (!coverage || coverage.total === 0) {
     return (
       <Card>
@@ -376,9 +493,15 @@ function CoverageCard({ coverage }: { coverage: DocCoverageReport | null }) {
         <ul className="mt-4 space-y-2">
           {coverage.modules.slice(0, 6).map((m) => (
             <li key={m.module} className="flex items-center gap-3 text-sm">
-              <span className="w-32 shrink-0 truncate font-mono text-xs text-muted-foreground">
+              <a
+                href={moduleUrl(m.module)}
+                target="_blank"
+                rel="noreferrer"
+                title={`Open ${m.module} on GitHub`}
+                className="w-32 shrink-0 truncate font-mono text-xs text-muted-foreground hover:text-primary hover:underline"
+              >
                 {m.module}
-              </span>
+              </a>
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                 <div
                   className={cn(

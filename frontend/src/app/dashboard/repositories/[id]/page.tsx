@@ -40,7 +40,7 @@ import {
   type RepositoryInsights,
   type RiskFinding,
 } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, ghBlobUrl } from "@/lib/utils";
 
 const SEVERITY_COLORS: Record<string, string> = {
   high: CHART_COLORS.danger,
@@ -264,9 +264,19 @@ export default function RepositoryDetailPage() {
         />
       </div>
 
-      {insights && <InsightsSection insights={insights} />}
+      {insights && (
+        <InsightsSection
+          insights={insights}
+          repoFullName={repo.full_name}
+          defaultBranch={repo.default_branch}
+        />
+      )}
 
-      <MetricsSection repoId={repo.id} />
+      <MetricsSection
+        repoId={repo.id}
+        repoFullName={repo.full_name}
+        defaultBranch={repo.default_branch}
+      />
 
       <OrientationSection
         guide={guide}
@@ -467,7 +477,15 @@ function toSlices(counts: Record<string, number>, order: string[]) {
     .map((k) => ({ name: k, value: counts[k], color: SEVERITY_COLORS[k] ?? CHART_COLORS.primary }));
 }
 
-function InsightsSection({ insights }: { insights: RepositoryInsights }) {
+function InsightsSection({
+  insights,
+  repoFullName,
+  defaultBranch,
+}: {
+  insights: RepositoryInsights;
+  repoFullName: string;
+  defaultBranch: string;
+}) {
   const activity = insights.activity.map((p) => ({ date: p.date.slice(5), count: p.drift + p.risk }));
   const severity = toSlices(insights.drift_by_severity, ["high", "medium", "low", "info"]);
   const riskBars = ["high", "medium", "low"]
@@ -547,21 +565,36 @@ function InsightsSection({ insights }: { insights: RepositoryInsights }) {
 
       <Card className="lg:col-span-2">
         <CardHeader>
-          <CardTitle className="text-base">Top risk files</CardTitle>
+          <CardTitle className="text-base">Files flagged by PR risk analysis</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Source files that test-risk analysis flagged on analyzed pull requests. Open one on
+            GitHub, or generate a test PR from its risk finding under Insights.
+          </p>
         </CardHeader>
         <CardContent>
           {insights.top_risk_paths.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No risk findings yet.</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No files flagged yet. Analyze a pull request to surface test-risk findings.
+            </p>
           ) : (
             <ul className="divide-y divide-border">
               {insights.top_risk_paths.map((p) => (
                 <li key={p.path} className="flex items-center gap-3 py-2">
-                  <Badge tone={severityTone(p.risk_level)}>{p.risk_level}</Badge>
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+                  <Badge tone={severityTone(p.risk_level)}>{p.risk_level} risk</Badge>
+                  <a
+                    href={ghBlobUrl(repoFullName, defaultBranch, p.path)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`Open ${p.path} on GitHub`}
+                    className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground hover:text-primary hover:underline"
+                  >
                     {p.path}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {p.count} finding{p.count === 1 ? "" : "s"}
+                  </a>
+                  <span
+                    className="text-xs text-muted-foreground"
+                    title="Number of test-risk findings recorded for this file"
+                  >
+                    {p.count} risk finding{p.count === 1 ? "" : "s"}
                   </span>
                 </li>
               ))}
