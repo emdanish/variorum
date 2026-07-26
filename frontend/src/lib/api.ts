@@ -137,6 +137,45 @@ export interface HealthScore {
   doc_coverage_pct: number;
 }
 
+export interface DecisionSource {
+  ref: string;
+  kind: string;
+  url: string | null;
+}
+
+export interface Decision {
+  id: number;
+  title: string;
+  summary: string;
+  sources: DecisionSource[];
+  decided_at: string | null;
+  generated_at: string;
+}
+
+export interface PrBriefingFile {
+  path: string;
+  hotspot_score: number | null;
+  hotspot_level: string | null;
+  has_tests: boolean | null;
+  module: string;
+  primary_owner: string | null;
+  bus_factor: number | null;
+  single_owner: boolean;
+  risk_findings: number;
+}
+
+export interface PrBriefing {
+  pr_number: number;
+  files: PrBriefingFile[];
+  summary: {
+    files_analyzed: number;
+    high_risk_files: number;
+    single_owner_files: number;
+    untested_files: number;
+    top_file: string | null;
+  };
+}
+
 export interface TeamInsights {
   id: number;
   installation_id: number;
@@ -266,6 +305,11 @@ export const api = {
   docCoverage: (id: number) =>
     request<DocCoverageReport>(`/api/v1/repositories/${id}/doc-coverage`),
   health: (id: number) => request<HealthScore>(`/api/v1/repositories/${id}/health`),
+  decisions: (id: number) => request<Decision[]>(`/api/v1/repositories/${id}/decisions`),
+  generateDecisions: (id: number) =>
+    request<Decision[]>(`/api/v1/repositories/${id}/decisions`, { method: "POST" }),
+  prBriefing: (id: number, prNumber: number) =>
+    request<PrBriefing>(`/api/v1/repositories/${id}/pr-briefing/${prNumber}`),
   teams: () => request<TeamInsights[]>("/api/v1/teams"),
   connectRepository: (id: number) =>
     request<Repository>(`/api/v1/repositories/${id}/connect`, { method: "POST" }),

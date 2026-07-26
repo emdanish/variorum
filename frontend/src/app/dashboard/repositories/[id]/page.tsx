@@ -20,9 +20,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ActivityArea, Bars, CHART_COLORS, Donut } from "@/components/dashboard/charts";
+import { DecisionTimeline } from "@/components/dashboard/decision-timeline";
 import { DriftFindingCard, RiskFindingCard } from "@/components/dashboard/finding-cards";
 import { MetricsSection } from "@/components/dashboard/metrics-section";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { PrBriefingPanel } from "@/components/dashboard/pr-briefing";
 import { useDashboard } from "@/components/dashboard/provider";
 import { Count, TabButton } from "@/components/dashboard/tabs";
 import { Badge, severityTone } from "@/components/ui/badge";
@@ -277,6 +279,14 @@ export default function RepositoryDetailPage() {
         repoFullName={repo.full_name}
         defaultBranch={repo.default_branch}
       />
+
+      <PrBriefingPanel
+        repoId={repo.id}
+        repoFullName={repo.full_name}
+        defaultBranch={repo.default_branch}
+      />
+
+      <DecisionTimeline repoId={repo.id} />
 
       <OrientationSection
         guide={guide}
