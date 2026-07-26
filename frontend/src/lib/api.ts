@@ -88,6 +88,55 @@ export interface RepositoryGuide {
   generated_at: string;
 }
 
+export interface Hotspot {
+  path: string;
+  score: number;
+  level: string;
+  changes: number;
+  churn: number;
+  authors: number;
+  fixes: number;
+  has_tests: boolean;
+}
+
+export interface ModuleOwnership {
+  module: string;
+  author_count: number;
+  primary_owner: string;
+  primary_share: number;
+  bus_factor: number;
+  single_owner: boolean;
+}
+
+export interface OwnershipReport {
+  modules: ModuleOwnership[];
+  module_count: number;
+  single_owner_modules: number;
+}
+
+export interface DocCoverageModule {
+  module: string;
+  documented: number;
+  total: number;
+  pct: number;
+}
+
+export interface DocCoverageReport {
+  overall_pct: number;
+  documented: number;
+  total: number;
+  modules: DocCoverageModule[];
+}
+
+export interface HealthScore {
+  score: number;
+  level: string;
+  subscores: Record<string, number>;
+  single_owner_modules: number;
+  module_count: number;
+  doc_coverage_pct: number;
+}
+
 export interface TeamInsights {
   id: number;
   installation_id: number;
@@ -212,6 +261,11 @@ export const api = {
   generateOrientation: (id: number) =>
     request<RepositoryGuide>(`/api/v1/repositories/${id}/orientation`, { method: "POST" }),
   jobs: (id: number) => request<Job[]>(`/api/v1/repositories/${id}/jobs`),
+  hotspots: (id: number) => request<Hotspot[]>(`/api/v1/repositories/${id}/hotspots`),
+  ownership: (id: number) => request<OwnershipReport>(`/api/v1/repositories/${id}/ownership`),
+  docCoverage: (id: number) =>
+    request<DocCoverageReport>(`/api/v1/repositories/${id}/doc-coverage`),
+  health: (id: number) => request<HealthScore>(`/api/v1/repositories/${id}/health`),
   teams: () => request<TeamInsights[]>("/api/v1/teams"),
   connectRepository: (id: number) =>
     request<Repository>(`/api/v1/repositories/${id}/connect`, { method: "POST" }),

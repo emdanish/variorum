@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   BookMarked,
   CheckCircle2,
   FileText,
+  Gauge,
   Github,
   Plug,
   ShieldAlert,
+  Users,
 } from "lucide-react";
 import { ActivityArea, Bars, CHART_COLORS, Donut } from "@/components/dashboard/charts";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -17,9 +20,31 @@ import { Badge, severityTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
+import { api, type HealthScore } from "@/lib/api";
+
+function useAggregateHealth(repoIds: number[]) {
+  const [health, setHealth] = useState<HealthScore[] | null>(null);
+  const key = repoIds.join(",");
+  useEffect(() => {
+    if (repoIds.length === 0) {
+      setHealth([]);
+      return;
+    }
+    let active = true;
+    Promise.all(repoIds.map((id) => api.health(id).catch(() => null))).then((results) => {
+      if (active) setHealth(results.filter((h): h is HealthScore => h !== null));
+    });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return health;
+}
 
 export default function OverviewPage() {
   const { repos, findings, risk, installUrl } = useDashboard();
+  const health = useAggregateHealth(repos.map((r) => r.id));
 
   if (repos.length === 0) return <EmptyDashboard installUrl={installUrl} />;
 
@@ -75,6 +100,8 @@ export default function OverviewPage() {
           sub={highRisk > 0 ? `${highRisk} high risk` : "no high risk"}
         />
       </div>
+
+      <KnowledgeHealthBand health={health} />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -183,6 +210,51 @@ function RecentActivity({
         );
       })}
     </ul>
+  );
+}
+
+function KnowledgeHealthBand({ health }: { health: HealthScore[] | null }) {
+  if (health === null) {
+    return <Card className="mt-4 h-24 animate-pulse bg-card/60" />;
+  }
+  if (health.length === 0) return null;
+
+  const avg = Math.round(health.reduce((s, h) => s + h.score, 0) / health.length);
+  const atRisk = health.filter((h) => h.score < 50).length;
+  const singleOwner = health.reduce((s, h) => s + h.single_owner_modules, 0);
+  const color = avg >= 80 ? "text-success" : avg >= 50 ? "text-warning" : "text-danger";
+
+  return (
+    <Card className="mt-4">
+      <CardContent className="flex flex-wrap items-center gap-x-10 gap-y-4 py-5">
+        <div className="flex items-center gap-3">
+          <Gauge className={`h-6 w-6 ${color}`} />
+          <div>
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">
+              Knowledge health
+            </div>
+            <div className={`text-3xl font-semibold tabular-nums ${color}`}>
+              {avg}
+              <span className="ml-1 text-sm font-normal text-muted-foreground">/ 100 avg</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+          <span className="text-muted-foreground">Repos needing attention</span>
+          <span className="font-semibold tabular-nums">{atRisk}</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          <span className="text-muted-foreground">Single-owner modules</span>
+          <span className="font-semibold tabular-nums">{singleOwner}</span>
+        </div>
+        <p className="ml-auto max-w-xs text-xs text-muted-foreground">
+          Composite of documentation, coverage, risk, and ownership across{" "}
+          {health.length} {health.length === 1 ? "repository" : "repositories"}.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 

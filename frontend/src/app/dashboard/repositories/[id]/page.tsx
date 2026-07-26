@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 import { ActivityArea, Bars, CHART_COLORS, Donut } from "@/components/dashboard/charts";
 import { DriftFindingCard, RiskFindingCard } from "@/components/dashboard/finding-cards";
+import { MetricsSection } from "@/components/dashboard/metrics-section";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { useDashboard } from "@/components/dashboard/provider";
 import { Count, TabButton } from "@/components/dashboard/tabs";
@@ -264,6 +265,8 @@ export default function RepositoryDetailPage() {
       </div>
 
       {insights && <InsightsSection insights={insights} />}
+
+      <MetricsSection repoId={repo.id} />
 
       <OrientationSection
         guide={guide}
