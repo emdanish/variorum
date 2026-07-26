@@ -49,7 +49,13 @@ def test_create_app_jwt_is_valid_and_signed():
 
 
 def test_missing_private_key_raises():
-    settings = Settings(_env_file=None, github_app_id="123456")  # no key configured
+    # Point the key path at a definitely-absent file so the test is hermetic
+    # regardless of any real key that may exist at the default path on disk.
+    settings = Settings(
+        _env_file=None,
+        github_app_id="123456",
+        github_app_private_key_path="/nonexistent/variorum-no-such-key.pem",
+    )
     auth = GitHubAppAuth(settings)
     with pytest.raises(GitHubConfigError):
         auth.create_app_jwt()
