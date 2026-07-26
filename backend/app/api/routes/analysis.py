@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable
+from typing import Any
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -152,6 +155,47 @@ def restore_finding(
     return finding_to_response(finding)
 
 
+async def _run_pr_generation(
+    coro: Awaitable[Any],
+    *,
+    finding_id: int,
+    log_label: str,
+    none_detail: str,
+) -> GeneratedPRResponse:
+    """Await a PR-creation coroutine and map its failures to clean HTTP errors.
+    Shared by the doc-fix and test-generation endpoints."""
+    try:
+        result = await coro
+    except AllProvidersFailedError as exc:
+        logger.warning("%s AI generation failed finding=%s: %s", log_label, finding_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI generation is unavailable right now. Please try again.",
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        logger.warning("%s GitHub error finding=%s: %s", log_label, finding_id, exc)
+        detail = f"GitHub API error ({exc.response.status_code}). Check the App's permissions."
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc
+    except httpx.HTTPError as exc:
+        logger.warning("%s GitHub request failed finding=%s: %s", log_label, finding_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The GitHub request failed. Please try again.",
+        ) from exc
+
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=none_detail)
+    return GeneratedPRResponse(
+        id=result.generated_pr_id,
+        finding_id=finding_id,
+        pr_number=result.pr_number,
+        branch=result.branch,
+        url=result.url,
+        state="open",
+        reused=result.reused,
+    )
+
+
 @findings_router.post("/{finding_id}/open-pr", response_model=GeneratedPRResponse)
 async def open_doc_fix_pr(
     finding_id: int,
@@ -170,38 +214,11 @@ async def open_doc_fix_pr(
         )
 
     client = GitHubClient(get_github_auth())
-    try:
-        result = await create_doc_fix_pr(db, finding, client=client, ai=ai)
-    except AllProvidersFailedError as exc:
-        logger.warning("doc-fix AI generation failed finding=%s: %s", finding.id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="AI generation is unavailable right now. Please try again.",
-        ) from exc
-    except httpx.HTTPStatusError as exc:
-        logger.warning("doc-fix GitHub error finding=%s: %s", finding.id, exc)
-        detail = f"GitHub API error ({exc.response.status_code}). Check the App's permissions."
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc
-    except httpx.HTTPError as exc:
-        logger.warning("doc-fix GitHub request failed finding=%s: %s", finding.id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="The GitHub request failed. Please try again.",
-        ) from exc
-
-    if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="No documentation change was generated for this finding.",
-        )
-    return GeneratedPRResponse(
-        id=result.generated_pr_id,
+    return await _run_pr_generation(
+        create_doc_fix_pr(db, finding, client=client, ai=ai),
         finding_id=finding.id,
-        pr_number=result.pr_number,
-        branch=result.branch,
-        url=result.url,
-        state="open",
-        reused=result.reused,
+        log_label="doc-fix",
+        none_detail="No documentation change was generated for this finding.",
     )
 
 
@@ -231,38 +248,11 @@ async def generate_tests(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No AI provider configured"
         )
     client = GitHubClient(get_github_auth())
-    try:
-        result = await create_test_pr(db, finding, client=client, ai=ai)
-    except AllProvidersFailedError as exc:
-        logger.warning("test-gen AI generation failed finding=%s: %s", finding.id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="AI generation is unavailable right now. Please try again.",
-        ) from exc
-    except httpx.HTTPStatusError as exc:
-        logger.warning("test-gen GitHub error finding=%s: %s", finding.id, exc)
-        detail = f"GitHub API error ({exc.response.status_code}). Check the App's permissions."
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc
-    except httpx.HTTPError as exc:
-        logger.warning("test-gen GitHub request failed finding=%s: %s", finding.id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="The GitHub request failed. Please try again.",
-        ) from exc
-
-    if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="No tests were generated for this finding.",
-        )
-    return GeneratedPRResponse(
-        id=result.generated_pr_id,
+    return await _run_pr_generation(
+        create_test_pr(db, finding, client=client, ai=ai),
         finding_id=finding.id,
-        pr_number=result.pr_number,
-        branch=result.branch,
-        url=result.url,
-        state="open",
-        reused=result.reused,
+        log_label="test-gen",
+        none_detail="No tests were generated for this finding.",
     )
 
 

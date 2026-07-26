@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Lightbulb, Search } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { DriftFindingCard, RiskFindingCard } from "@/components/dashboard/finding-cards";
 import { useDashboard } from "@/components/dashboard/provider";
+import { Count, TabButton } from "@/components/dashboard/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -143,36 +144,6 @@ export default function InsightsPage() {
         </div>
       )}
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-        active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Count({ n }: { n: number }) {
-  return (
-    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
-      {n}
-    </span>
   );
 }
 

@@ -23,6 +23,7 @@ import { ActivityArea, Bars, CHART_COLORS, Donut } from "@/components/dashboard/
 import { DriftFindingCard, RiskFindingCard } from "@/components/dashboard/finding-cards";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { useDashboard } from "@/components/dashboard/provider";
+import { Count, TabButton } from "@/components/dashboard/tabs";
 import { Badge, severityTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -657,36 +658,6 @@ function AnalyzeForm({
         <Sparkles className="h-3.5 w-3.5" /> Analyze PR
       </Button>
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-        active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Count({ n }: { n: number }) {
-  return (
-    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
-      {n}
-    </span>
   );
 }
 

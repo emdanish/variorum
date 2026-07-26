@@ -108,9 +108,14 @@ Reconciled to the current implementation:
    queue lands. (Documented.)
 2. **In-process rate limiter** is per-process; add an edge/shared limiter for
    multi-replica.
-3. **`npm audit`** flags advisories in Next.js's transitive deps
-   (`postcss`/`sharp`); low real-world exploitability here. Clear via a verified
-   Next minor bump as its own change.
+3. **`npm audit`** flags advisories in Next.js's *bundled* transitive deps
+   (`postcss`, `sharp`). Investigated: upgrading to the latest 15.x (15.5.22)
+   does **not** clear them — those versions ship the same bundled deps, and
+   npm's only offered "fix" is a nonsensical downgrade to `next@9`. Both are
+   non-exploitable here (postcss runs at build time on our own CSS; `next/image`
+   isn't used with untrusted images). **Accepted** on Next `15.1.4` until an
+   upstream Next release updates the bundled deps; revisit on the next major
+   Next upgrade.
 4. **Deferred refactors** (PR-flow dedup, risk-status enum, risk PR-opened state,
    frontend DRY) — maintainability polish, best done as isolated reviewed PRs.
 
