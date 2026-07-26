@@ -815,6 +815,61 @@ authoritative API reference; §13 lists the original Phase-1 set.
 
 ---
 
+## Post-MVP roadmap — Repository Analytics & Team Intelligence (complete)
+
+With the three PRD product surfaces built, an approved follow-on roadmap turned
+the accumulated code index + history into **actionable, cited analytics** for
+individuals, repositories, and the whole portfolio. Delivered in three waves,
+each fully tested and shipped (backend service + endpoint + tests, then frontend
+UI, verify, commit, push). Same principle throughout: **surface evidence, link
+to the source, recommend an action — never just show a number.**
+
+### Wave 1 — Repository metrics
+- **Change dataset:** `FileChange` churn table (migration `e9a1c4d7b350`),
+  populated from commit-file history during ingestion; a reusable
+  `services/metrics.py` (`hotspot_map`, `compute_ownership`, `compute_doc_coverage`,
+  `compute_health`).
+- **Change-risk hotspots:** per-file score (churn × changes × fix-commits ×
+  missing-tests), paginated, colour-legended, each file deep-links to GitHub.
+- **Ownership & bus-factor:** per-module author concentration; flags single-owner
+  modules (`author_count == 1 or primary_share ≥ 0.8`).
+- **Doc coverage & Knowledge Health Score:** documented-source ratio with
+  *actionable* recommendations, plus a composite health score with subscores.
+- In-card **"Ingest history"** button with auto-refresh polling so cards populate
+  without leaving the page.
+
+### Wave 2 — Knowledge & workflow
+- **Decision Timeline:** `DecisionEntry` model (migration `f3c8a1e6d924`); AI
+  distils history into cited "why" decisions.
+- **PR Impact Briefing:** per-changed-file hotspot/ownership/risk rollup for a PR.
+- **Unified Search:** one query across symbols, docs, decisions, and knowledge.
+- **Weekly Digest:** trailing-window recap (new drift/risk/knowledge, health,
+  single-owner count, top hotspots, recently ingested) — all items clickable.
+- **Contradiction Detection:** flags recorded decisions/history a PR appears to
+  contradict, with citations.
+
+### Wave 3 — Org-level & access
+- **Portfolio Health:** `GET /portfolio` — cross-repo health, at-risk count,
+  clickable top hotspot per repo, plus a client-computed recommendations panel.
+- **Expertise Directory:** `GET /experts` — authorship rollup with bus-factor
+  banner, sole-owner areas, languages, and a "best person to ask" highlight.
+- **API access & tokens:** additive bearer-token auth alongside session cookies;
+  `ApiToken` model (migration `a2f7b1c93d05`, SHA-256 hash only, plaintext shown
+  once); `/auth/tokens` CRUD; a Settings token manager with copy/revoke and a
+  curl usage snippet.
+- **Slack digest delivery:** per-user incoming-webhook config (`User.slack_webhook_url`,
+  migration `b8e4d21a6c37`; status endpoint never returns the secret URL);
+  `POST /repositories/{id}/digest/slack` formats and sends the weekly digest
+  (409 if unconfigured, 502 if Slack rejects). Sending is **always** an explicit
+  user action; tests mock the HTTP call — no live Slack traffic.
+
+**Status:** 206 backend tests, mypy + ruff clean; frontend tsc + lint clean,
+production build passes (13 routes). All resources remain ownership-scoped; the
+human-review gate and $0 constraint are preserved (Slack incoming webhooks and
+the AI free-tier fallback add no cost).
+
+---
+
 ## Environment, skills & tooling
 
 **Permanent memory:** [`CLAUDE.md`](./CLAUDE.md) is the entry point for every
