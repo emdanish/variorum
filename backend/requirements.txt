@@ -1,0 +1,16 @@
+# Runtime dependencies (Phase 0 foundation).
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+SQLAlchemy==2.0.36
+psycopg[binary]==3.2.3
+alembic==1.14.0
+httpx==0.28.1
+PyJWT[crypto]==2.10.1
+itsdangerous==2.2.0
+
+# Code indexing (wired in milestone M2 — kept here so the environment is ready).
+# tree-sitter and language grammars ship prebuilt wheels.
+tree-sitter==0.23.2
+tree-sitter-language-pack==0.4.0

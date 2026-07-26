@@ -1,0 +1,24 @@
+services:
+  db:
+    # pgvector image tracks PostgreSQL 17; Phase 2 semantic search needs the
+    # `vector` extension, so we run it from day one to avoid a later swap.
+    image: pgvector/pgvector:pg17
+    container_name: variorum-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: variorum
+      POSTGRES_PASSWORD: variorum
+      POSTGRES_DB: variorum
+    ports:
+      # Host 5433 avoids clashing with a native PostgreSQL commonly on 5432.
+      - "5433:5432"
+    volumes:
+      - variorum_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U variorum -d variorum"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  variorum_pgdata:

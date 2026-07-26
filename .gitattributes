@@ -1,0 +1,7 @@
+# Normalize line endings to LF in the repository (deploys target Linux).
+* text=auto eol=lf
+
+*.pem binary
+*.png binary
+*.jpg binary
+*.ico binary
