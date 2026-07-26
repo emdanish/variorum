@@ -117,6 +117,24 @@ class KnowledgeStats(BaseModel):
     last_occurred_at: datetime | None = None
 
 
+class AskRequest(BaseModel):
+    question: str
+
+
+class Citation(BaseModel):
+    kind: str
+    source_ref: str
+    title: str | None = None
+    url: str | None = None
+
+
+class AskResponse(BaseModel):
+    answer: str
+    citations: list[Citation]
+    provider: str | None = None
+    model: str | None = None
+
+
 class GitHubAppStatus(BaseModel):
     app_id: bool = False
     private_key: bool = False

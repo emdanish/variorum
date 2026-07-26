@@ -10,6 +10,7 @@ import {
   Search,
   XCircle,
 } from "lucide-react";
+import { EngineeringMemory } from "@/components/engineering-memory";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -351,6 +352,8 @@ export default function DashboardPage() {
                 )}
               </CardContent>
             </Card>
+
+            {repos.length > 0 && <EngineeringMemory repos={repos} />}
           </>
         )}
       </main>

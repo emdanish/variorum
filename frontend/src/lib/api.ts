@@ -73,6 +73,26 @@ export interface GeneratedPR {
   reused: boolean;
 }
 
+export interface KnowledgeStats {
+  total: number;
+  by_kind: Record<string, number>;
+  last_occurred_at: string | null;
+}
+
+export interface Citation {
+  kind: string;
+  source_ref: string;
+  title: string | null;
+  url: string | null;
+}
+
+export interface AskResponse {
+  answer: string;
+  citations: Citation[];
+  provider: string | null;
+  model: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -117,4 +137,16 @@ export const api = {
       `/api/v1/repositories/${repoId}/analyze-pr`,
       { method: "POST", body: JSON.stringify({ pr_number: prNumber }) },
     ),
+  ingestHistory: (repoId: number) =>
+    request<{ status: string; repository_id: number }>(
+      `/api/v1/repositories/${repoId}/ingest-history`,
+      { method: "POST" },
+    ),
+  knowledgeStats: (repoId: number) =>
+    request<KnowledgeStats>(`/api/v1/repositories/${repoId}/knowledge/stats`),
+  ask: (repoId: number, question: string) =>
+    request<AskResponse>(`/api/v1/repositories/${repoId}/ask`, {
+      method: "POST",
+      body: JSON.stringify({ question }),
+    }),
 };

@@ -4,7 +4,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.ai.base import AllProvidersFailedError
+from app.api.deps import get_ai_service, get_current_user, get_db
 from app.api.routes.analysis import finding_to_response
 from app.core.logging import get_logger
 from app.models import (
@@ -21,6 +22,9 @@ from app.models import (
 from app.schemas import (
     AnalyzePrRequest,
     AnalyzePrResponse,
+    AskRequest,
+    AskResponse,
+    Citation,
     FindingResponse,
     IngestResponse,
     JobResponse,
@@ -28,6 +32,7 @@ from app.schemas import (
     RepositoryDetail,
     RepositoryResponse,
 )
+from app.services.qa import answer_question, retrieve
 from app.workers.indexing import run_index_job
 from app.workers.ingest import run_ingest_history_job
 from app.workers.pr_analysis import run_pr_analysis_job
@@ -198,6 +203,45 @@ def knowledge_stats(
         )
     )
     return KnowledgeStats(total=sum(by_kind.values()), by_kind=by_kind, last_occurred_at=last)
+
+
+@router.post("/{repo_id}/ask", response_model=AskResponse)
+async def ask(
+    repo_id: int,
+    payload: AskRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AskResponse:
+    """Answer a question about the repository's engineering history, grounded in
+    ingested knowledge entries and cited."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty question")
+
+    ai = get_ai_service()
+    if not ai.available:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No AI provider configured"
+        )
+
+    entries = retrieve(db, repo.id, question)
+    try:
+        result = await answer_question(ai, question, entries)
+    except AllProvidersFailedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI request failed: {exc}"
+        ) from exc
+
+    return AskResponse(
+        answer=result.answer,
+        citations=[
+            Citation(kind=e.kind.value, source_ref=e.source_ref, title=e.title, url=e.url)
+            for e in result.cited_entries
+        ],
+        provider=result.provider,
+        model=result.model,
+    )
 
 
 @router.post("/{repo_id}/connect", response_model=RepositoryResponse)
