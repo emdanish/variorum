@@ -117,6 +117,17 @@ class KnowledgeStats(BaseModel):
     last_occurred_at: datetime | None = None
 
 
+class RiskFindingResponse(BaseModel):
+    id: int
+    path: str
+    risk_level: str
+    summary: str
+    pr_number: int | None = None
+    has_tests: bool | None = None
+    untested_scenarios: list[str] = []
+    created_at: datetime
+
+
 class AskRequest(BaseModel):
     question: str
 

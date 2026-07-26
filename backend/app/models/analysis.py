@@ -48,6 +48,19 @@ class DriftFinding(Base, TimestampMixin):
     status: Mapped[FindingStatus] = mapped_column(default=FindingStatus.detected, nullable=False)
 
 
+class RiskFinding(Base, TimestampMixin):
+    __tablename__ = "risk_findings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    analysis_job_id: Mapped[int] = mapped_column(
+        ForeignKey("analysis_jobs.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    risk_level: Mapped[DriftSeverity] = mapped_column(default=DriftSeverity.low, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+
+
 class GeneratedPR(Base, TimestampMixin):
     __tablename__ = "generated_prs"
 

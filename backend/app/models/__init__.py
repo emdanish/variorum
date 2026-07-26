@@ -3,6 +3,7 @@ from app.models.analysis import (
     DriftFinding,
     GeneratedPR,
     ProviderCall,
+    RiskFinding,
 )
 from app.models.code import CodeSymbol, DocCodeLink, Document
 from app.models.enums import (
@@ -40,5 +41,6 @@ __all__ = [
     "LinkSource",
     "ProviderCall",
     "Repository",
+    "RiskFinding",
     "User",
 ]

@@ -73,6 +73,17 @@ export interface GeneratedPR {
   reused: boolean;
 }
 
+export interface RiskFinding {
+  id: number;
+  path: string;
+  risk_level: string;
+  summary: string;
+  pr_number: number | null;
+  has_tests: boolean | null;
+  untested_scenarios: string[];
+  created_at: string;
+}
+
 export interface KnowledgeStats {
   total: number;
   by_kind: Record<string, number>;
@@ -137,6 +148,13 @@ export const api = {
       `/api/v1/repositories/${repoId}/analyze-pr`,
       { method: "POST", body: JSON.stringify({ pr_number: prNumber }) },
     ),
+  analyzeRisk: (repoId: number, prNumber: number) =>
+    request<{ status: string; pr_number: number }>(
+      `/api/v1/repositories/${repoId}/analyze-risk`,
+      { method: "POST", body: JSON.stringify({ pr_number: prNumber }) },
+    ),
+  riskFindings: (repoId: number) =>
+    request<RiskFinding[]>(`/api/v1/repositories/${repoId}/risk-findings`),
   ingestHistory: (repoId: number) =>
     request<{ status: string; repository_id: number }>(
       `/api/v1/repositories/${repoId}/ingest-history`,

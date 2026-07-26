@@ -732,4 +732,24 @@ on.
     Gemini 503 mid-answer.
 
 **Status:** 113 tests, mypy + ruff clean. Phase 2 (Engineering Memory) is
-functionally complete; Phase 3 (Testing Intelligence) is the next major phase.
+functionally complete.
+
+---
+
+## Phase 3 — Testing Intelligence (in progress)
+
+Help teams keep quality high: score the risk of a change and turn gaps into
+CI-verified test PRs.
+
+- **M8 — Risk analysis (complete):** `RiskFinding` model + migration; a scoring
+  service that derives per-file signals (churn, symbol count, and a
+  test-coverage heuristic over the code index) and asks the AI to assess risk
+  and list *specific, testable* untested scenarios; `run_risk_analysis_job`
+  (per-file failure isolation, supersede-on-re-run); `POST
+  /repositories/{id}/analyze-risk` + `GET /repositories/{id}/risk-findings`; a
+  "Testing intelligence" dashboard card. 121 tests, mypy + ruff clean. Verified
+  live on variorum PR #1 (medium risk, concrete untested scenarios).
+- **M9 — Test-PR generation (next):** for a risky/uncovered file, generate a
+  test file via the AI and open a test PR through the GitHub App (reusing the
+  doc-fix PR machinery). The repository's existing CI verifies it; humans review
+  and merge.

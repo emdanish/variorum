@@ -18,6 +18,7 @@ from app.models import (
     IndexingStatus,
     KnowledgeEntry,
     Repository,
+    RiskFinding,
     User,
 )
 from app.schemas import (
@@ -32,11 +33,13 @@ from app.schemas import (
     KnowledgeStats,
     RepositoryDetail,
     RepositoryResponse,
+    RiskFindingResponse,
 )
 from app.services.qa import answer_question, retrieve
 from app.workers.indexing import run_index_job
 from app.workers.ingest import run_ingest_history_job
 from app.workers.pr_analysis import run_pr_analysis_job
+from app.workers.risk_analysis import run_risk_analysis_job
 
 logger = get_logger("variorum.repositories")
 router = APIRouter(prefix="/repositories", tags=["repositories"])
@@ -169,6 +172,53 @@ def analyze_pr(
     )
     logger.info("manual PR analysis queued repo=%s pr=%s", repo.full_name, payload.pr_number)
     return AnalyzePrResponse(status="queued", repository_id=repo.id, pr_number=payload.pr_number)
+
+
+@router.post("/{repo_id}/analyze-risk", response_model=AnalyzePrResponse, status_code=202)
+def analyze_risk(
+    repo_id: int,
+    payload: AnalyzePrRequest,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AnalyzePrResponse:
+    """Assess the test-risk of a pull request's changed source files."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    background_tasks.add_task(run_risk_analysis_job, repo.id, payload.pr_number)
+    logger.info("risk analysis queued repo=%s pr=%s", repo.full_name, payload.pr_number)
+    return AnalyzePrResponse(status="queued", repository_id=repo.id, pr_number=payload.pr_number)
+
+
+@router.get("/{repo_id}/risk-findings", response_model=list[RiskFindingResponse])
+def list_risk_findings(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[RiskFindingResponse]:
+    repo = _get_owned_repo(db, user.id, repo_id)
+    rows = (
+        db.execute(
+            select(RiskFinding)
+            .join(AnalysisJob, RiskFinding.analysis_job_id == AnalysisJob.id)
+            .where(AnalysisJob.repository_id == repo.id)
+            .order_by(RiskFinding.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        RiskFindingResponse(
+            id=f.id,
+            path=f.path,
+            risk_level=f.risk_level.value,
+            summary=f.summary,
+            pr_number=(f.evidence or {}).get("pr_number"),
+            has_tests=(f.evidence or {}).get("has_tests"),
+            untested_scenarios=(f.evidence or {}).get("untested_scenarios") or [],
+            created_at=f.created_at,
+        )
+        for f in rows
+    ]
 
 
 @router.post("/{repo_id}/ingest-history", response_model=IngestResponse, status_code=202)

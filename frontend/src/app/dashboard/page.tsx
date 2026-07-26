@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { EngineeringMemory } from "@/components/engineering-memory";
 import { SiteHeader } from "@/components/site-header";
+import { TestingIntelligence } from "@/components/testing-intelligence";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -353,6 +354,7 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
+            {repos.length > 0 && <TestingIntelligence repos={repos} />}
             {repos.length > 0 && <EngineeringMemory repos={repos} />}
           </>
         )}
