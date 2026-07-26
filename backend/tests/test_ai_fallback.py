@@ -103,11 +103,11 @@ def test_default_manager_uses_required_fallback_order():
     manager = build_provider_manager(settings)
 
     names = [p.name for p in manager.active_providers]
-    assert names == ["gemini-1", "gemini-2", "deepseek", "perplexity"]
+    assert names == ["perplexity", "deepseek", "gemini-1", "gemini-2"]
 
 
 def test_default_manager_only_activates_configured_providers():
     settings = Settings(_env_file=None, gemini_api_key_1="k1", perplexity_api_key="k4")
     manager = build_provider_manager(settings)
 
-    assert [p.name for p in manager.active_providers] == ["gemini-1", "perplexity"]
+    assert [p.name for p in manager.active_providers] == ["perplexity", "gemini-1"]

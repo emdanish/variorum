@@ -92,20 +92,20 @@ class AIService:
 
 def build_provider_manager(settings: Settings) -> ProviderManager:
     """Wire providers in the required fallback order:
-    Gemini key 1 -> Gemini key 2 -> DeepSeek -> Perplexity."""
+    Perplexity -> DeepSeek -> Gemini key 1 -> Gemini key 2."""
     return ProviderManager(
         [
+            PerplexityProvider(
+                api_key=settings.perplexity_api_key, model=settings.perplexity_model
+            ),
+            DeepSeekProvider(
+                api_key=settings.deepseek_api_key, model=settings.deepseek_model
+            ),
             GeminiProvider(
                 name="gemini-1", api_key=settings.gemini_api_key_1, model=settings.gemini_model
             ),
             GeminiProvider(
                 name="gemini-2", api_key=settings.gemini_api_key_2, model=settings.gemini_model
-            ),
-            DeepSeekProvider(
-                api_key=settings.deepseek_api_key, model=settings.deepseek_model
-            ),
-            PerplexityProvider(
-                api_key=settings.perplexity_api_key, model=settings.perplexity_model
             ),
         ]
     )
