@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock, Flame } from "lucide-react";
+import { CalendarClock, Flame, Loader2, Slack } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, type DigestReport } from "@/lib/api";
@@ -34,6 +36,8 @@ export function DigestCard({
 }) {
   const [loading, setLoading] = useState(true);
   const [digest, setDigest] = useState<DigestReport | null>(null);
+  const [slackReady, setSlackReady] = useState(false);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -43,10 +47,26 @@ export function DigestCard({
       .then((d) => active && setDigest(d))
       .catch(() => active && setDigest(null))
       .finally(() => active && setLoading(false));
+    api
+      .slackStatus()
+      .then((s) => active && setSlackReady(s.configured))
+      .catch(() => active && setSlackReady(false));
     return () => {
       active = false;
     };
   }, [repoId]);
+
+  const sendToSlack = async () => {
+    setSending(true);
+    try {
+      await api.sendDigestToSlack(repoId, 7);
+      toast.success("Digest sent to Slack");
+    } catch (e) {
+      toast.error("Couldn't send to Slack", { description: (e as Error).message });
+    } finally {
+      setSending(false);
+    }
+  };
 
   if (loading) return <Skeleton className="mt-4 h-40 w-full" />;
   if (!digest) return null;
@@ -144,6 +164,18 @@ export function DigestCard({
               </div>
             )}
           </>
+        )}
+        {slackReady && !quiet && (
+          <div className="mt-4 flex justify-end border-t border-border/60 pt-3">
+            <Button variant="outline" size="sm" disabled={sending} onClick={() => void sendToSlack()}>
+              {sending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Slack className="h-3.5 w-3.5" />
+              )}
+              Send to Slack
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>

@@ -21,6 +21,10 @@ export interface ApiTokenCreated extends ApiToken {
   token: string;
 }
 
+export interface SlackStatus {
+  configured: boolean;
+}
+
 export interface Repository {
   id: number;
   installation_id: number;
@@ -421,6 +425,13 @@ export const api = {
     }),
   revokeToken: (id: number) =>
     request<void>(`/api/v1/auth/tokens/${id}`, { method: "DELETE" }),
+  slackStatus: () => request<SlackStatus>("/api/v1/auth/slack"),
+  setSlackWebhook: (webhookUrl: string) =>
+    request<SlackStatus>("/api/v1/auth/slack", {
+      method: "PUT",
+      body: JSON.stringify({ webhook_url: webhookUrl }),
+    }),
+  deleteSlackWebhook: () => request<void>("/api/v1/auth/slack", { method: "DELETE" }),
   installUrl: () => request<{ install_url: string }>("/api/v1/github/install-url"),
   repositories: () => request<Repository[]>("/api/v1/repositories"),
   repository: (id: number) => request<RepositoryDetail>(`/api/v1/repositories/${id}`),
@@ -445,6 +456,10 @@ export const api = {
     request<SearchResults>(`/api/v1/repositories/${id}/search?q=${encodeURIComponent(q)}`),
   digest: (id: number, days = 7) =>
     request<DigestReport>(`/api/v1/repositories/${id}/digest?days=${days}`),
+  sendDigestToSlack: (id: number, days = 7) =>
+    request<{ sent: boolean }>(`/api/v1/repositories/${id}/digest/slack?days=${days}`, {
+      method: "POST",
+    }),
   contradictions: (id: number, prNumber: number) =>
     request<ContradictionReport>(`/api/v1/repositories/${id}/contradictions/${prNumber}`),
   teams: () => request<TeamInsights[]>("/api/v1/teams"),

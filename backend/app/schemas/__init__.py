@@ -33,6 +33,18 @@ class ApiTokenCreated(ApiTokenResponse):
     token: str
 
 
+class SlackConfig(BaseModel):
+    webhook_url: str = Field(min_length=1, max_length=512)
+
+
+class SlackStatus(BaseModel):
+    configured: bool
+
+
+class SlackSendResult(BaseModel):
+    sent: bool
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

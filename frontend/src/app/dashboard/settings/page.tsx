@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, KeyRound, Loader2, Plus, Slack, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,103 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, BACKEND_URL, type ApiToken } from "@/lib/api";
+
+function SlackSection() {
+  const [configured, setConfigured] = useState<boolean | null>(null);
+  const [url, setUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api
+      .slackStatus()
+      .then((s) => setConfigured(s.configured))
+      .catch(() => setConfigured(false));
+  }, []);
+
+  const save = async () => {
+    const u = url.trim();
+    if (!u) return;
+    setSaving(true);
+    try {
+      await api.setSlackWebhook(u);
+      setConfigured(true);
+      setUrl("");
+      toast.success("Slack webhook saved");
+    } catch (e) {
+      toast.error("Couldn't save webhook", { description: (e as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    try {
+      await api.deleteSlackWebhook();
+      setConfigured(false);
+      toast.success("Slack webhook removed");
+    } catch (e) {
+      toast.error("Couldn't remove", { description: (e as Error).message });
+    }
+  };
+
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Slack className="h-4 w-4 text-primary" /> Slack digests
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {configured === null ? (
+          <Skeleton className="h-16 w-full" />
+        ) : configured ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-1.5 text-sm text-success">
+              <Check className="h-4 w-4" /> Connected
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Use “Send to Slack” on any repository&apos;s weekly digest.
+            </span>
+            <Button variant="outline" size="sm" className="ml-auto" onClick={() => void remove()}>
+              <Trash2 className="mr-1.5 h-3.5 w-3.5 text-danger" /> Remove
+            </Button>
+          </div>
+        ) : (
+          <>
+            <p className="mb-2 text-sm text-muted-foreground">
+              Paste an{" "}
+              <a
+                href="https://api.slack.com/messaging/webhooks"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                incoming webhook URL
+              </a>{" "}
+              to post weekly digests to a channel.
+            </p>
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label className="mb-1 block text-xs text-muted-foreground">Webhook URL</label>
+                <Input
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && void save()}
+                  placeholder="https://hooks.slack.com/services/…"
+                  maxLength={512}
+                />
+              </div>
+              <Button disabled={saving || !url.trim()} onClick={() => void save()}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Slack className="h-4 w-4" />}
+                Save
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function fmt(iso: string | null): string {
   if (!iso) return "never";
@@ -74,7 +171,7 @@ export default function SettingsPage() {
     <div className="animate-fade-in max-w-3xl">
       <PageHeader
         title="Settings"
-        description="Personal API tokens for programmatic access — CI, scripts, and integrations."
+        description="API tokens for programmatic access and Slack digest delivery."
       />
 
       <Card>
@@ -153,6 +250,8 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <SlackSection />
 
       <Card className="mt-4">
         <CardHeader>

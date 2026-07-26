@@ -56,6 +56,7 @@ from app.schemas import (
     RiskFindingResponse,
     RiskPath,
     SearchResults,
+    SlackSendResult,
 )
 from app.services import contradictions as contradictions_svc
 from app.services import decisions as decisions_svc
@@ -65,6 +66,7 @@ from app.services import metrics as metrics_svc
 from app.services import orientation as orientation_svc
 from app.services import pr_impact as pr_impact_svc
 from app.services import search as search_svc
+from app.services import slack as slack_svc
 from app.services.github.client import GitHubClient
 from app.services.qa import answer_question, retrieve
 from app.workers.indexing import run_index_job
@@ -515,6 +517,33 @@ def repository_digest(
     """A trailing-window recap of the repository's engineering activity."""
     repo = _get_owned_repo(db, user.id, repo_id)
     return DigestReport(**digest_svc.build_digest(db, repo.id, days=days))
+
+
+@router.post("/{repo_id}/digest/slack", response_model=SlackSendResult)
+async def send_digest_to_slack(
+    repo_id: int,
+    days: int = Query(7, ge=1, le=90),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SlackSendResult:
+    """Post the repository digest to the user's configured Slack webhook."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    if not user.slack_webhook_url:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No Slack webhook configured. Add one in Settings.",
+        )
+    digest = digest_svc.build_digest(db, repo.id, days=days)
+    payload = slack_svc.build_digest_message(repo.full_name, digest)
+    try:
+        await slack_svc.send(user.slack_webhook_url, payload)
+    except httpx.HTTPError as exc:
+        logger.warning("slack send failed repo=%s: %s", repo.id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Slack rejected the message. Check the webhook URL.",
+        ) from exc
+    return SlackSendResult(sent=True)
 
 
 @router.get("/{repo_id}/contradictions/{pr_number}", response_model=ContradictionReport)

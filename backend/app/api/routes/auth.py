@@ -10,7 +10,15 @@ from app.api.deps import get_current_user, get_db, get_github_oauth, get_setting
 from app.core.config import Settings
 from app.core.logging import get_logger
 from app.models import User
-from app.schemas import ApiTokenCreate, ApiTokenCreated, ApiTokenResponse, UserResponse
+from app.schemas import (
+    ApiTokenCreate,
+    ApiTokenCreated,
+    ApiTokenResponse,
+    SlackConfig,
+    SlackStatus,
+    UserResponse,
+)
+from app.services import slack as slack_svc
 from app.services import tokens as tokens_svc
 from app.services.github.oauth import GitHubOAuth, GitHubOAuthError
 from app.services.users import upsert_user_from_github
@@ -118,3 +126,37 @@ def revoke_api_token(
 ) -> None:
     if not tokens_svc.revoke_token(db, user.id, token_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
+
+
+@router.get("/slack", response_model=SlackStatus)
+def slack_status(user: User = Depends(get_current_user)) -> SlackStatus:
+    """Report whether a Slack webhook is configured (never returns the secret URL)."""
+    return SlackStatus(configured=bool(user.slack_webhook_url))
+
+
+@router.put("/slack", response_model=SlackStatus)
+def set_slack_webhook(
+    payload: SlackConfig,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SlackStatus:
+    if not slack_svc.is_valid_webhook(payload.webhook_url):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Enter a valid Slack incoming-webhook URL (https://hooks.slack.com/...).",
+        )
+    user.slack_webhook_url = payload.webhook_url
+    db.add(user)
+    db.commit()
+    logger.info("slack webhook configured user=%s", user.id)
+    return SlackStatus(configured=True)
+
+
+@router.delete("/slack", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+def delete_slack_webhook(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    user.slack_webhook_url = None
+    db.add(user)
+    db.commit()
