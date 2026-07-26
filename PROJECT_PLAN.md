@@ -763,6 +763,12 @@ Documentation Intelligence (Phase 1), Engineering Memory (Phase 2), and Testing
 Intelligence (Phase 3) — each following the same detect/answer → propose loop
 with a human review gate.
 
+### Enhancement — unified PR analysis
+A single **"Analyze PR"** (the `POST /repositories/{id}/analyze-pr` endpoint and
+the `pull_request` webhook) now fans out to **both** documentation-drift and
+test-risk analysis in one action; the dashboard shows both result cards from
+that one trigger. The granular `analyze-risk` endpoint remains for targeted runs.
+
 ---
 
 ## Environment, skills & tooling

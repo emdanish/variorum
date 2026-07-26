@@ -22,6 +22,7 @@ import {
   type Finding,
   type Installation,
   type Repository,
+  type RiskFinding,
   type SystemStatus,
   type User,
 } from "@/lib/api";
@@ -35,6 +36,7 @@ export default function DashboardPage() {
   const [installations, setInstallations] = useState<Installation[]>([]);
   const [repos, setRepos] = useState<Repository[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
+  const [riskFindings, setRiskFindings] = useState<RiskFinding[]>([]);
   const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [prByFinding, setPrByFinding] = useState<Record<number, { url: string | null }>>({});
   const [pendingPr, setPendingPr] = useState<number | null>(null);
@@ -52,10 +54,14 @@ export default function DashboardPage() {
     if (iu.status === "fulfilled") setInstallUrl(iu.value.install_url);
     if (r.status === "fulfilled") {
       setRepos(r.value);
-      const lists = await Promise.all(
-        r.value.map((repo) => api.findings(repo.id).catch(() => [] as Finding[])),
-      );
-      setFindings(lists.flat());
+      const [driftLists, riskLists] = await Promise.all([
+        Promise.all(r.value.map((repo) => api.findings(repo.id).catch(() => [] as Finding[]))),
+        Promise.all(
+          r.value.map((repo) => api.riskFindings(repo.id).catch(() => [] as RiskFinding[])),
+        ),
+      ]);
+      setFindings(driftLists.flat());
+      setRiskFindings(riskLists.flat());
     }
   }, []);
 
@@ -125,9 +131,12 @@ export default function DashboardPage() {
   const onAnalyze = async (repo: Repository, prNumber: number) => {
     try {
       await api.analyzePr(repo.id, prNumber);
-      setBanner(`Analysis queued for ${repo.full_name} PR #${prNumber}. Findings will appear shortly.`);
-      window.setTimeout(() => void silentRefresh(), 4000);
-      window.setTimeout(() => void silentRefresh(), 10000);
+      setBanner(
+        `Analyzing ${repo.full_name} PR #${prNumber} for doc drift and test risk. ` +
+          "Findings will appear below shortly.",
+      );
+      window.setTimeout(() => void silentRefresh(), 5000);
+      window.setTimeout(() => void silentRefresh(), 12000);
     } catch (e) {
       setBanner((e as Error).message);
     }
@@ -354,7 +363,7 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {repos.length > 0 && <TestingIntelligence repos={repos} />}
+            {repos.length > 0 && <TestingIntelligence findings={riskFindings} />}
             {repos.length > 0 && <EngineeringMemory repos={repos} />}
           </>
         )}
@@ -392,7 +401,7 @@ function AnalyzeForm({
       />
       <Button variant="outline" size="sm" disabled={disabled || !value} onClick={submit}>
         <Search className="h-3.5 w-3.5" />
-        Analyze
+        Analyze PR
       </Button>
     </div>
   );

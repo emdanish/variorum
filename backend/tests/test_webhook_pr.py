@@ -40,6 +40,7 @@ def _payload(action: str, repo_id: int, number: int) -> bytes:
 
 def _patch(monkeypatch):
     calls: list[tuple] = []
+    risk_calls: list[tuple] = []
     monkeypatch.setattr(
         "app.api.routes.webhooks.verify_webhook_signature", lambda *a, **k: True
     )
@@ -47,11 +48,15 @@ def _patch(monkeypatch):
         "app.api.routes.webhooks.run_pr_analysis_job",
         lambda *args, **kwargs: calls.append((args, kwargs)),
     )
-    return calls
+    monkeypatch.setattr(
+        "app.api.routes.webhooks.run_risk_analysis_job",
+        lambda *args, **kwargs: risk_calls.append((args, kwargs)),
+    )
+    return calls, risk_calls
 
 
 def test_pull_request_opened_enqueues_analysis(client, db_session, monkeypatch):
-    calls = _patch(monkeypatch)
+    calls, risk_calls = _patch(monkeypatch)
     repo = _seed_repo(db_session, 5501)
 
     resp = client.post(
@@ -65,10 +70,12 @@ def test_pull_request_opened_enqueues_analysis(client, db_session, monkeypatch):
     args, kwargs = calls[0]
     assert args == (repo.id, 7)
     assert kwargs["head_sha"] == "deadbeef"
+    # Unified flow: risk analysis is enqueued too.
+    assert risk_calls and risk_calls[0][0] == (repo.id, 7)
 
 
 def test_pull_request_closed_is_skipped(client, db_session, monkeypatch):
-    calls = _patch(monkeypatch)
+    calls, risk_calls = _patch(monkeypatch)
     _seed_repo(db_session, 5502)
 
     resp = client.post(
@@ -77,11 +84,11 @@ def test_pull_request_closed_is_skipped(client, db_session, monkeypatch):
         headers={"X-GitHub-Event": "pull_request", "X-Hub-Signature-256": "sha256=x"},
     )
     assert resp.json()["result"] == "pr_analysis:skipped"
-    assert calls == []
+    assert calls == [] and risk_calls == []
 
 
 def test_pull_request_unknown_repo_is_skipped(client, db_session, monkeypatch):
-    calls = _patch(monkeypatch)
+    calls, risk_calls = _patch(monkeypatch)
 
     resp = client.post(
         "/webhooks/github",
@@ -89,4 +96,4 @@ def test_pull_request_unknown_repo_is_skipped(client, db_session, monkeypatch):
         headers={"X-GitHub-Event": "pull_request", "X-Hub-Signature-256": "sha256=x"},
     )
     assert resp.json()["result"] == "pr_analysis:skipped"
-    assert calls == []
+    assert calls == [] and risk_calls == []

@@ -164,13 +164,14 @@ def analyze_pr(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AnalyzePrResponse:
-    """Manually run drift analysis for a pull request. Lets a demo trigger the
-    full pipeline without an inbound GitHub webhook (no public tunnel needed)."""
+    """Run the full PR analysis — documentation drift AND test risk — for a pull
+    request. Lets a demo trigger the whole pipeline without an inbound webhook."""
     repo = _get_owned_repo(db, user.id, repo_id)
     background_tasks.add_task(
         run_pr_analysis_job, repo.id, payload.pr_number, head_sha=payload.head_sha
     )
-    logger.info("manual PR analysis queued repo=%s pr=%s", repo.full_name, payload.pr_number)
+    background_tasks.add_task(run_risk_analysis_job, repo.id, payload.pr_number)
+    logger.info("PR analysis (drift+risk) queued repo=%s pr=%s", repo.full_name, payload.pr_number)
     return AnalyzePrResponse(status="queued", repository_id=repo.id, pr_number=payload.pr_number)
 
 

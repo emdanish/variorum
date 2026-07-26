@@ -40,16 +40,23 @@ def test_analyze_pr_enqueues_job(authed_client, db_session, monkeypatch):
     db_session.add(repo)
     db_session.flush()
 
-    calls: list[tuple] = []
+    drift_calls: list[tuple] = []
+    risk_calls: list[tuple] = []
     monkeypatch.setattr(
         "app.api.routes.repositories.run_pr_analysis_job",
-        lambda *args, **kwargs: calls.append((args, kwargs)),
+        lambda *a, **k: drift_calls.append((a, k)),
+    )
+    monkeypatch.setattr(
+        "app.api.routes.repositories.run_risk_analysis_job",
+        lambda *a, **k: risk_calls.append((a, k)),
     )
 
     resp = api_client.post(f"/api/v1/repositories/{repo.id}/analyze-pr", json={"pr_number": 77})
     assert resp.status_code == 202
     assert resp.json() == {"status": "queued", "repository_id": repo.id, "pr_number": 77}
-    assert calls and calls[0][0] == (repo.id, 77)
+    # Unified flow: one call fans out to BOTH drift and risk analysis.
+    assert drift_calls and drift_calls[0][0] == (repo.id, 77)
+    assert risk_calls and risk_calls[0][0] == (repo.id, 77)
 
 
 def test_analyze_pr_unknown_repo_404(authed_client):
