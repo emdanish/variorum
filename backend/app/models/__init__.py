@@ -22,10 +22,12 @@ from app.models.github import GitHubInstallation, Repository
 from app.models.knowledge import KnowledgeEntry
 from app.models.metrics import FileChange
 from app.models.orientation import RepositoryGuide
+from app.models.token import ApiToken
 from app.models.user import User
 
 __all__ = [
     "AnalysisJob",
+    "ApiToken",
     "CodeSymbol",
     "DecisionEntry",
     "DocCodeLink",

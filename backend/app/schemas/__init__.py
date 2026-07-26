@@ -17,6 +17,22 @@ class InstallUrlResponse(BaseModel):
     install_url: str
 
 
+class ApiTokenCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class ApiTokenResponse(BaseModel):
+    id: int
+    name: str
+    prefix: str
+    last_used_at: datetime | None = None
+    created_at: datetime
+
+
+class ApiTokenCreated(ApiTokenResponse):
+    token: str
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -10,7 +10,8 @@ from app.api.deps import get_current_user, get_db, get_github_oauth, get_setting
 from app.core.config import Settings
 from app.core.logging import get_logger
 from app.models import User
-from app.schemas import UserResponse
+from app.schemas import ApiTokenCreate, ApiTokenCreated, ApiTokenResponse, UserResponse
+from app.services import tokens as tokens_svc
 from app.services.github.oauth import GitHubOAuth, GitHubOAuthError
 from app.services.users import upsert_user_from_github
 
@@ -71,3 +72,49 @@ def me(user: User = Depends(get_current_user)) -> User:
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def logout(request: Request) -> None:
     request.session.clear()
+
+
+@router.post("/tokens", response_model=ApiTokenCreated)
+def create_api_token(
+    payload: ApiTokenCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiTokenCreated:
+    """Create a personal API token. The plaintext is returned once — store it now."""
+    row, plaintext = tokens_svc.create_token(db, user.id, payload.name)
+    logger.info("api token created user=%s prefix=%s", user.id, row.prefix)
+    return ApiTokenCreated(
+        id=row.id,
+        name=row.name,
+        prefix=row.prefix,
+        created_at=row.created_at,
+        last_used_at=row.last_used_at,
+        token=plaintext,
+    )
+
+
+@router.get("/tokens", response_model=list[ApiTokenResponse])
+def list_api_tokens(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[ApiTokenResponse]:
+    return [
+        ApiTokenResponse(
+            id=t.id,
+            name=t.name,
+            prefix=t.prefix,
+            created_at=t.created_at,
+            last_used_at=t.last_used_at,
+        )
+        for t in tokens_svc.list_tokens(db, user.id)
+    ]
+
+
+@router.delete("/tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+def revoke_api_token(
+    token_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    if not tokens_svc.revoke_token(db, user.id, token_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")

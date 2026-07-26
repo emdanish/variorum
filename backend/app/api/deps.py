@@ -35,12 +35,20 @@ def get_github_oauth() -> GitHubOAuth:
 
 def get_optional_user(request: Request, db: Session = Depends(get_db)) -> User | None:
     user_id = request.session.get("user_id")
-    if not user_id:
-        return None
-    user = db.get(User, user_id)
-    if user is None:
-        request.session.clear()
-    return user
+    if user_id:
+        user = db.get(User, user_id)
+        if user is None:
+            request.session.clear()
+        return user
+    # Fall back to a personal API token (Authorization: Bearer <token>) so CI,
+    # scripts, and integrations can call the API without a browser session.
+    auth_header = request.headers.get("authorization") or ""
+    scheme, _, token = auth_header.partition(" ")
+    if scheme.lower() == "bearer" and token:
+        from app.services import tokens as tokens_svc
+
+        return tokens_svc.resolve_token(db, token.strip())
+    return None
 
 
 def get_current_user(user: User | None = Depends(get_optional_user)) -> User:
