@@ -191,12 +191,12 @@ setup, coding standards, and the pull request process.
 
 ## Author
 
-**Muhammad Danish** — Full Stack Developer
+**Muhammad Danish** — Computer Scientist & Software Engineer
 [emdanish.dev](https://emdanish.dev)
 
-Computer Science student and software developer focused on building practical SaaS
-products and AI-powered engineering tools. Built with Next.js, React, TypeScript,
-Tailwind CSS, FastAPI, Python, PostgreSQL, and AI/GitHub integrations.
+Computer scientist and software engineer focused on building practical SaaS products
+and AI-powered engineering tools. Built with Next.js, React, TypeScript, Tailwind CSS,
+FastAPI, Python, PostgreSQL, and AI/GitHub integrations.
 
 ## License
 
