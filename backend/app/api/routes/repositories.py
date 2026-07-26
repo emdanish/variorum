@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -34,8 +34,10 @@ from app.schemas import (
     AskRequest,
     AskResponse,
     Citation,
+    ContradictionReport,
     DecisionResponse,
     DecisionSource,
+    DigestReport,
     DocCoverageReport,
     FindingResponse,
     GuideArea,
@@ -53,12 +55,16 @@ from app.schemas import (
     RepositoryResponse,
     RiskFindingResponse,
     RiskPath,
+    SearchResults,
 )
+from app.services import contradictions as contradictions_svc
 from app.services import decisions as decisions_svc
+from app.services import digest as digest_svc
 from app.services import insights as insights_svc
 from app.services import metrics as metrics_svc
 from app.services import orientation as orientation_svc
 from app.services import pr_impact as pr_impact_svc
+from app.services import search as search_svc
 from app.services.github.client import GitHubClient
 from app.services.qa import answer_question, retrieve
 from app.workers.indexing import run_index_job
@@ -485,6 +491,86 @@ async def pr_impact_briefing(
 
     briefing = pr_impact_svc.build_briefing(db, repo.id, [f.path for f in changed])
     return PrBriefing(pr_number=pr_number, **briefing)
+
+
+@router.get("/{repo_id}/search", response_model=SearchResults)
+def repository_search(
+    repo_id: int,
+    q: str = Query(min_length=2, max_length=200),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SearchResults:
+    """Unified search across code symbols, documentation, decisions, and history."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    return SearchResults(**search_svc.unified_search(db, repo.id, q))
+
+
+@router.get("/{repo_id}/digest", response_model=DigestReport)
+def repository_digest(
+    repo_id: int,
+    days: int = Query(7, ge=1, le=90),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DigestReport:
+    """A trailing-window recap of the repository's engineering activity."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    return DigestReport(**digest_svc.build_digest(db, repo.id, days=days))
+
+
+@router.get("/{repo_id}/contradictions/{pr_number}", response_model=ContradictionReport)
+async def pr_contradictions(
+    repo_id: int,
+    pr_number: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ContradictionReport:
+    """Flag recorded decisions/history that a pull request appears to contradict."""
+    if pr_number <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid PR number")
+    repo = _get_owned_repo(db, user.id, repo_id)
+    ai = get_ai_service()
+    if not ai.available:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No AI provider configured"
+        )
+    installation = db.get(GitHubInstallation, repo.installation_id)
+    if installation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Installation not found")
+
+    client = GitHubClient(get_github_auth())
+    try:
+        changed = await client.list_pull_request_files(
+            installation.installation_id, repo.full_name, pr_number
+        )
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"PR #{pr_number} not found"
+            ) from exc
+        logger.warning("contradiction GitHub error repo=%s pr=%s: %s", repo.id, pr_number, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="GitHub request failed."
+        ) from exc
+    except httpx.HTTPError as exc:
+        logger.warning("contradiction GitHub failed repo=%s pr=%s: %s", repo.id, pr_number, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="GitHub request failed."
+        ) from exc
+
+    change_text = "\n".join(f"{f.path}\n{(f.patch or '')[:800]}" for f in changed)
+    if not change_text.strip():
+        return ContradictionReport(pr_number=pr_number, contradictions=[])
+
+    entries = retrieve(db, repo.id, change_text, embedder=get_embedding_service())
+    try:
+        found = await contradictions_svc.check_contradictions(ai, change_text, entries)
+    except (AllProvidersFailedError, ValueError) as exc:
+        logger.warning("contradiction check failed repo=%s pr=%s: %s", repo.id, pr_number, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI is unavailable right now. Please try again.",
+        ) from exc
+    return ContradictionReport(pr_number=pr_number, contradictions=found)
 
 
 @router.post("/{repo_id}/ingest-history", response_model=IngestResponse, status_code=202)

@@ -210,6 +210,65 @@ class PrBriefing(BaseModel):
     summary: PrBriefingSummary
 
 
+class SymbolHit(BaseModel):
+    name: str
+    path: str
+    kind: str
+    language: str | None = None
+
+
+class DocumentHit(BaseModel):
+    path: str
+    title: str | None = None
+
+
+class DecisionHit(BaseModel):
+    id: int
+    title: str
+    summary: str
+    decided_at: datetime | None = None
+
+
+class KnowledgeHit(BaseModel):
+    kind: str
+    source_ref: str
+    title: str | None = None
+    url: str | None = None
+
+
+class SearchResults(BaseModel):
+    query: str
+    symbols: list[SymbolHit] = []
+    documents: list[DocumentHit] = []
+    decisions: list[DecisionHit] = []
+    knowledge: list[KnowledgeHit] = []
+    total: int = 0
+
+
+class DigestReport(BaseModel):
+    days: int
+    new_drift: int
+    new_risk: int
+    new_knowledge: int
+    decisions_total: int
+    health_score: int
+    health_level: str
+    single_owner_modules: int
+    top_hotspots: list["Hotspot"] = []
+    recent_knowledge: list[KnowledgeHit] = []
+    generated_at: datetime
+
+
+class ContradictionItem(BaseModel):
+    source: KnowledgeHit
+    explanation: str
+
+
+class ContradictionReport(BaseModel):
+    pr_number: int
+    contradictions: list[ContradictionItem] = []
+
+
 class Hotspot(BaseModel):
     path: str
     score: int
