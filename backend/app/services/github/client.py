@@ -37,6 +37,12 @@ class ChangedFile:
     deletions: int
 
 
+@dataclass
+class PullRequestResult:
+    number: int
+    url: str
+
+
 class GitHubClient:
     """Installation-scoped GitHub REST client. Authenticates as the App (JWT) for
     App-level reads and mints short-lived installation tokens for repository
@@ -142,6 +148,95 @@ class GitHubClient:
         if data.get("encoding") == "base64" and "content" in data:
             return base64.b64decode(data["content"]).decode("utf-8", "replace")
         return None
+
+    async def get_file(
+        self, installation_id: int, full_name: str, path: str, ref: str
+    ) -> tuple[str | None, str | None]:
+        """Return (content, blob_sha) for a file at a ref, or (None, None) if
+        it does not exist. The blob sha is required to update the file."""
+        headers = await self._installation_headers(installation_id)
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            resp = await client.get(
+                f"{GITHUB_API}/repos/{full_name}/contents/{path}",
+                headers=headers,
+                params={"ref": ref},
+            )
+        if resp.status_code == 404:
+            return None, None
+        resp.raise_for_status()
+        data = resp.json()
+        content = None
+        if data.get("encoding") == "base64" and "content" in data:
+            content = base64.b64decode(data["content"]).decode("utf-8", "replace")
+        return content, data.get("sha")
+
+    async def get_branch_sha(
+        self, installation_id: int, full_name: str, branch: str
+    ) -> str:
+        headers = await self._installation_headers(installation_id)
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            resp = await client.get(
+                f"{GITHUB_API}/repos/{full_name}/git/ref/heads/{branch}", headers=headers
+            )
+        resp.raise_for_status()
+        return resp.json()["object"]["sha"]
+
+    async def create_branch(
+        self, installation_id: int, full_name: str, branch: str, base_sha: str
+    ) -> None:
+        headers = await self._installation_headers(installation_id)
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            resp = await client.post(
+                f"{GITHUB_API}/repos/{full_name}/git/refs",
+                headers=headers,
+                json={"ref": f"refs/heads/{branch}", "sha": base_sha},
+            )
+        resp.raise_for_status()
+
+    async def put_file(
+        self,
+        installation_id: int,
+        full_name: str,
+        path: str,
+        message: str,
+        content: str,
+        branch: str,
+        sha: str | None = None,
+    ) -> None:
+        headers = await self._installation_headers(installation_id)
+        body: dict = {
+            "message": message,
+            "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+            "branch": branch,
+        }
+        if sha:
+            body["sha"] = sha
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            resp = await client.put(
+                f"{GITHUB_API}/repos/{full_name}/contents/{path}", headers=headers, json=body
+            )
+        resp.raise_for_status()
+
+    async def create_pull_request(
+        self,
+        installation_id: int,
+        full_name: str,
+        *,
+        title: str,
+        head: str,
+        base: str,
+        body: str,
+    ) -> PullRequestResult:
+        headers = await self._installation_headers(installation_id)
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            resp = await client.post(
+                f"{GITHUB_API}/repos/{full_name}/pulls",
+                headers=headers,
+                json={"title": title, "head": head, "base": base, "body": body},
+            )
+        resp.raise_for_status()
+        data = resp.json()
+        return PullRequestResult(number=data["number"], url=data["html_url"])
 
 
 def _parse_repo(r: dict) -> RepoInfo:

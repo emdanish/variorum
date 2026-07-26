@@ -4,15 +4,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.ai.base import AllProvidersFailedError
+from app.api.deps import get_ai_service, get_current_user, get_db, get_github_auth
 from app.models import (
     AnalysisJob,
     DriftFinding,
+    FindingStatus,
     GitHubInstallation,
     Repository,
     User,
 )
-from app.schemas import FindingResponse, JobDetail
+from app.schemas import FindingResponse, GeneratedPRResponse, JobDetail
+from app.services.analysis.doc_pr import create_doc_fix_pr
+from app.services.github.client import GitHubClient
 
 jobs_router = APIRouter(prefix="/jobs", tags=["analysis"])
 findings_router = APIRouter(prefix="/findings", tags=["analysis"])
@@ -76,19 +80,64 @@ def get_job(
     )
 
 
+def _owned_finding(db: Session, user_id: int, finding_id: int) -> DriftFinding:
+    finding = db.execute(
+        select(DriftFinding)
+        .join(AnalysisJob, DriftFinding.analysis_job_id == AnalysisJob.id)
+        .join(Repository, AnalysisJob.repository_id == Repository.id)
+        .join(GitHubInstallation, Repository.installation_id == GitHubInstallation.id)
+        .where(DriftFinding.id == finding_id, GitHubInstallation.owner_user_id == user_id)
+    ).scalar_one_or_none()
+    if finding is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found")
+    return finding
+
+
 @findings_router.get("/{finding_id}", response_model=FindingResponse)
 def get_finding(
     finding_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FindingResponse:
-    finding = db.execute(
-        select(DriftFinding)
-        .join(AnalysisJob, DriftFinding.analysis_job_id == AnalysisJob.id)
-        .join(Repository, AnalysisJob.repository_id == Repository.id)
-        .join(GitHubInstallation, Repository.installation_id == GitHubInstallation.id)
-        .where(DriftFinding.id == finding_id, GitHubInstallation.owner_user_id == user.id)
-    ).scalar_one_or_none()
-    if finding is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Finding not found")
-    return finding_to_response(finding)
+    return finding_to_response(_owned_finding(db, user.id, finding_id))
+
+
+@findings_router.post("/{finding_id}/open-pr", response_model=GeneratedPRResponse)
+async def open_doc_fix_pr(
+    finding_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> GeneratedPRResponse:
+    finding = _owned_finding(db, user.id, finding_id)
+    if finding.status == FindingStatus.dismissed:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Finding is dismissed")
+
+    ai = get_ai_service()
+    if not ai.available:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No AI provider configured",
+        )
+
+    client = GitHubClient(get_github_auth())
+    try:
+        result = await create_doc_fix_pr(db, finding, client=client, ai=ai)
+    except AllProvidersFailedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI generation failed: {exc}"
+        ) from exc
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No documentation change was generated for this finding.",
+        )
+    return GeneratedPRResponse(
+        id=result.generated_pr_id,
+        finding_id=finding.id,
+        pr_number=result.pr_number,
+        branch=result.branch,
+        url=result.url,
+        state="open",
+        reused=result.reused,
+    )

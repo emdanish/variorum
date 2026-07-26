@@ -585,10 +585,40 @@ host port **5433** to avoid clashing with the native server.
       (drift / no-drift / missing-content / no-provider), webhook enqueue —
       **77 tests**, mypy + ruff clean, frontend build passes.
 
-**MVP status:** the Phase 1 loop is closed end-to-end except automated doc-fix
-PRs — connect → understand → **detect drift with evidence**.
+### M4 — Propose (complete)
+- [x] GitHub write operations on the client: `get_file` (content + blob sha),
+      `get_branch_sha`, `create_branch`, `put_file` (Contents API), and
+      `create_pull_request`.
+- [x] AI doc-fix generation: `generate_updated_document` rewrites the full
+      corrected file from the drift summary, suggested update, and evidence.
+- [x] `create_doc_fix_pr` orchestration: fetch current doc → generate update →
+      create branch → commit → open PR (body cites the drift + triggering PR) →
+      record in `generated_prs` and mark the finding `pr_opened`. Idempotent per
+      finding; skips when no change is produced or the doc is absent on base.
+- [x] `POST /findings/{id}/open-pr` endpoint (graceful 503/502/409 handling).
+- [x] Frontend: "Open doc-fix PR" action per finding with a resulting "View PR"
+      link.
+- [x] Tests: doc-fix generation (fake AI), create-PR orchestration with a fake
+      GitHub client (branch/commit/PR recorded, `generated_prs` row, finding
+      transition, no-change + missing-doc skips, idempotency), and client write
+      ops via mocked transport — **84 tests**, mypy + ruff clean, frontend build
+      passes.
 
-**Next up (M4 — Propose):** turn a `drift_finding` (with its AI-suggested update)
-into a real pull request via the GitHub App — create a branch, commit the doc
-change, open a PR referencing the triggering PR, and record it in `generated_prs`.
-Human review + merge stays the gate; Variorum never auto-merges.
+## MVP complete 🎉
+
+The Phase 1 loop is closed end-to-end: **connect → understand → detect drift
+(with evidence) → propose a doc-fix pull request**. Variorum proposes; humans
+review and merge — it never auto-merges or force-pushes.
+
+To run it live, register a GitHub App (README → *GitHub App setup*), fill the
+credentials + at least one AI key into `.env`, connect a repository, and open a
+pull request that changes documented code.
+
+**Next horizons (post-MVP):**
+- Harden the live path (rate limits, large diffs, incremental re-index on push).
+- Phase 2 — Engineering Memory: ingest commit/PR/issue history; evidence-cited
+  Q&A over the repository (`pgvector`).
+- Phase 3 — Testing Intelligence: risk scoring + coverage-gap → CI-verified test
+  PRs.
+- Durable job queue (replace `BackgroundTasks`), response caching, and
+  observability dashboards.

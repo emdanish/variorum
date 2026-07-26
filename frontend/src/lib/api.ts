@@ -48,6 +48,16 @@ export interface Finding {
   created_at: string;
 }
 
+export interface GeneratedPR {
+  id: number;
+  finding_id: number;
+  pr_number: number | null;
+  branch: string;
+  url: string | null;
+  state: string;
+  reused: boolean;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -84,4 +94,6 @@ export const api = {
     request<Repository>(`/api/v1/repositories/${id}/connect`, { method: "POST" }),
   findings: (repoId: number) =>
     request<Finding[]>(`/api/v1/repositories/${repoId}/findings`),
+  openDocFixPr: (findingId: number) =>
+    request<GeneratedPR>(`/api/v1/findings/${findingId}/open-pr`, { method: "POST" }),
 };

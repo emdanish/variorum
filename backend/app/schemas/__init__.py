@@ -85,6 +85,16 @@ class JobDetail(JobResponse):
     findings: list[FindingResponse] = []
 
 
+class GeneratedPRResponse(BaseModel):
+    id: int
+    finding_id: int
+    pr_number: int | None = None
+    branch: str
+    url: str | None = None
+    state: str
+    reused: bool = False
+
+
 class ErrorDetail(BaseModel):
     code: str
     message: str

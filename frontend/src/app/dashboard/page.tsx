@@ -33,6 +33,8 @@ export default function DashboardPage() {
   const [repos, setRepos] = useState<Repository[]>([]);
   const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
+  const [prByFinding, setPrByFinding] = useState<Record<number, { url: string | null }>>({});
+  const [pendingPr, setPendingPr] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
 
@@ -98,6 +100,21 @@ export default function DashboardPage() {
     await api.logout();
     setUser(null);
     setState("signed-out");
+  };
+
+  const onOpenPr = async (finding: Finding) => {
+    setPendingPr(finding.id);
+    try {
+      const pr = await api.openDocFixPr(finding.id);
+      setPrByFinding((prev) => ({ ...prev, [finding.id]: { url: pr.url } }));
+      setFindings((prev) =>
+        prev.map((f) => (f.id === finding.id ? { ...f, status: "pr_opened" } : f)),
+      );
+    } catch (e) {
+      setBanner((e as Error).message);
+    } finally {
+      setPendingPr(null);
+    }
   };
 
   return (
@@ -252,18 +269,26 @@ export default function DashboardPage() {
                   <ul className="space-y-3">
                     {findings.map((f) => (
                       <li key={f.id} className="rounded-md border border-border p-3">
-                        <div className="flex items-center gap-2">
-                          <SeverityBadge severity={f.severity} />
-                          {f.pr_number && (
-                            <span className="text-xs text-muted-foreground">
-                              PR #{f.pr_number}
-                            </span>
-                          )}
-                          {f.document_path && (
-                            <span className="font-mono text-xs text-muted-foreground">
-                              {f.document_path}
-                            </span>
-                          )}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <SeverityBadge severity={f.severity} />
+                            {f.pr_number && (
+                              <span className="text-xs text-muted-foreground">
+                                PR #{f.pr_number}
+                              </span>
+                            )}
+                            {f.document_path && (
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {f.document_path}
+                              </span>
+                            )}
+                          </div>
+                          <FindingAction
+                            finding={f}
+                            pending={pendingPr === f.id}
+                            pr={prByFinding[f.id]}
+                            onOpenPr={() => void onOpenPr(f)}
+                          />
                         </div>
                         <p className="mt-1.5 text-sm">{f.summary}</p>
                       </li>
@@ -312,6 +337,40 @@ function StatusBadge({ status }: { status: string }) {
           : "text-muted-foreground border-border";
   return (
     <span className={`rounded-full border px-2 py-0.5 text-xs ${tone}`}>{status}</span>
+  );
+}
+
+function FindingAction({
+  finding,
+  pending,
+  pr,
+  onOpenPr,
+}: {
+  finding: Finding;
+  pending: boolean;
+  pr?: { url: string | null };
+  onOpenPr: () => void;
+}) {
+  if (pr?.url) {
+    return (
+      <a href={pr.url} target="_blank" rel="noreferrer">
+        <Button variant="outline" size="sm">
+          View PR
+        </Button>
+      </a>
+    );
+  }
+  if (finding.status === "pr_opened") {
+    return <span className="text-xs text-muted-foreground">PR opened</span>;
+  }
+  return (
+    <Button variant="outline" size="sm" disabled={pending} onClick={onOpenPr}>
+      {pending ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        "Open doc-fix PR"
+      )}
+    </Button>
   );
 }
 
