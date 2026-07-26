@@ -73,7 +73,7 @@ All configuration is via environment variables documented in
 
 - `DATABASE_URL` — PostgreSQL connection (defaults match `docker-compose.yml`).
 - AI provider keys — at least one is required for analysis features. Fallback
-  order: **Gemini key 1 → Gemini key 2 → DeepSeek → Perplexity**.
+  order: **Perplexity → DeepSeek → Gemini key 1 → Gemini key 2**.
 - GitHub App credentials — see below.
 
 Secrets are **never** committed. `.env`, `*.pem`, and `secrets/` are git-ignored.
