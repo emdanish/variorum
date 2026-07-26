@@ -9,6 +9,18 @@ export interface User {
   github_user_id: number | null;
 }
 
+export interface ApiToken {
+  id: number;
+  name: string;
+  prefix: string;
+  last_used_at: string | null;
+  created_at: string;
+}
+
+export interface ApiTokenCreated extends ApiToken {
+  token: string;
+}
+
 export interface Repository {
   id: number;
   installation_id: number;
@@ -401,6 +413,14 @@ export const api = {
   systemStatus: () => request<SystemStatus>("/api/v1/system/status"),
   me: () => request<User>("/api/v1/auth/me"),
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
+  listTokens: () => request<ApiToken[]>("/api/v1/auth/tokens"),
+  createToken: (name: string) =>
+    request<ApiTokenCreated>("/api/v1/auth/tokens", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  revokeToken: (id: number) =>
+    request<void>(`/api/v1/auth/tokens/${id}`, { method: "DELETE" }),
   installUrl: () => request<{ install_url: string }>("/api/v1/github/install-url"),
   repositories: () => request<Repository[]>("/api/v1/repositories"),
   repository: (id: number) => request<RepositoryDetail>(`/api/v1/repositories/${id}`),

@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   LayoutGrid,
   Lightbulb,
+  Settings,
   UserSearch,
   Users,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const NAV = [
   { href: "/dashboard/experts", label: "Experts", icon: UserSearch },
   { href: "/dashboard/teams", label: "Teams", icon: Users },
   { href: "/dashboard/memory", label: "Engineering memory", icon: Brain },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {

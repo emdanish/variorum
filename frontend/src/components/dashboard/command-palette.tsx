@@ -11,6 +11,7 @@ import {
   Moon,
   RefreshCw,
   Search,
+  Settings,
   Sun,
   UserSearch,
   Users,
@@ -78,6 +79,7 @@ export function CommandPalette() {
       { id: "nav-experts", label: "Experts", group: "Navigate", icon: UserSearch, run: go("/dashboard/experts") },
       { id: "nav-teams", label: "Teams", group: "Navigate", icon: Users, run: go("/dashboard/teams") },
       { id: "nav-memory", label: "Engineering memory", group: "Navigate", icon: Brain, run: go("/dashboard/memory") },
+      { id: "nav-settings", label: "Settings", group: "Navigate", icon: Settings, run: go("/dashboard/settings") },
     ];
     const repoCmds: Command[] = repos.map((r) => ({
       id: `repo-${r.id}`,
