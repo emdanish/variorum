@@ -72,13 +72,15 @@ want live webhooks later, see §7.)
 
 Scroll to **Permissions → Repository permissions** and set:
 
-| Permission | Access |
-|---|---|
-| **Contents** | **Read and write** |
-| **Pull requests** | **Read and write** |
-| **Metadata** | Read-only (this is selected automatically) |
+| Permission | Access | Why |
+|---|---|---|
+| **Contents** | **Read and write** | Read code to index it; commit generated doc/test files to a branch |
+| **Pull requests** | **Read and write** | Read PR diffs; open doc-fix / test pull requests |
+| **Issues** | **Read-only** | Ingest issue history into Engineering Memory |
+| **Metadata** | Read-only (selected automatically) | Baseline repository metadata |
 
-Leave all other permissions as **No access**.
+Leave all other permissions as **No access**. Every permission above is least-privilege —
+Variorum never requests admin scopes and never writes to the default branch directly.
 
 ### 2.4 Installation scope
 
@@ -229,7 +231,7 @@ If you want pull requests to be analyzed automatically on open (no button):
 2. In your GitHub App settings → **Webhook**: check **Active**, set the
    **Webhook URL** to the smee URL, set a **Webhook secret** (any long random
    string) and put the same value in `.env` as `GITHUB_WEBHOOK_SECRET`.
-   Under **Subscribe to events**, check **Pull request**, **Push**,
+   Under **Subscribe to events**, check **Pull request**, **Push**, **Issues**,
    **Installation**, and **Installation repositories**. Save.
 3. Run the smee forwarder so events reach your backend:
    ```powershell

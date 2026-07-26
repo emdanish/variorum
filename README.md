@@ -1,56 +1,103 @@
+<div align="center">
+
 # Variorum
 
-**The memory system for software teams.** Variorum is an AI-powered engineering
-knowledge layer that continuously understands a GitHub repository and keeps the
-*context* around the code — decisions, history, and rationale — accurate over
-time.
+**The AI-powered engineering knowledge layer for software teams.**
 
-It is **not** a code generator. Coding assistants answer *"what code should I
-write?"* Variorum answers *"why does this code exist and how does the whole
-system fit together?"*
+Variorum connects to your GitHub repositories and preserves the knowledge *around*
+your code — the decisions, the history, and the rationale — so context never leaves
+with the people who wrote it.
 
-The first product surface (MVP, Phase 1) is **Documentation Intelligence**: when a
-pull request changes code, Variorum detects when documentation has drifted out of
-sync and proposes a doc-fix pull request — with evidence for every claim.
+<sub>Next.js · React · TypeScript · Tailwind · FastAPI · Python · PostgreSQL · GitHub App · Multi-provider AI</sub>
 
-> **Setting it up for a demo? Follow [`SETUP.md`](./SETUP.md)** — a click-by-click
-> guide to the GitHub App, every `.env` value, and the demo script.
-
-See [`PROJECT_PLAN.md`](./PROJECT_PLAN.md) for the full PRD, architecture, and
-roadmap.
+</div>
 
 ---
 
-## Repository layout
+## The problem
 
-```
-backend/    FastAPI + SQLAlchemy + AI provider layer + GitHub App service
-frontend/   Next.js + Tailwind + shadcn/ui
-docs/       architecture decision records
-scripts/    dev/setup helpers
-```
+Code is only half the story. The context around it — *why* a decision was made, *why*
+a workaround exists, which documentation is stale, what changed and why — is fragile.
+It lives in people's heads, scattered commits, and old pull requests, and it erodes as
+teams grow and engineers move on.
 
-## Prerequisites
+The result: docs drift out of date, onboarding drags for weeks, and the answer to
+"why is the system built this way?" is lost.
+
+## The solution
+
+Variorum continuously understands a repository and turns that scattered context into
+shared, trustworthy, **cited** knowledge. It is **not** a code generator — coding
+assistants answer *"what code should I write?"*; Variorum answers *"why does this code
+exist, and how does the whole system fit together?"*
+
+Every surface follows the same loop: **detect or answer → propose → human review.**
+Variorum proposes; your team reviews and merges. It never auto-merges and never
+force-pushes.
+
+## Features
+
+Variorum ships three product surfaces:
+
+| Surface | What it does |
+|---|---|
+| 📄 **Documentation Intelligence** | When a pull request changes code, Variorum detects when documentation has drifted out of sync — with evidence for every claim — and can open a doc-fix pull request for review. |
+| 🧠 **Engineering Memory** | Ingests commit, PR, and issue history into a searchable knowledge store and answers *"why is the system this way?"* with citations. Keyword + semantic retrieval. |
+| 🛡️ **Testing Intelligence** | Scores the risk of each pull request, surfaces scenarios that look untested, and can open a test pull request for review. |
+
+Underpinning all three:
+
+- **Codebase understanding** — a structural map of files, functions, classes, and how documentation relates to code (via [tree-sitter](https://tree-sitter.github.io/tree-sitter/)).
+- **Provider-agnostic AI** — a fallback chain across multiple providers so a single provider's quota or outage never breaks the product.
+- **Least-privilege GitHub App** — per-installation tokens, verified webhooks, scoped repository access.
+
+## How it works
+
+1. **Connect** your repository by installing the Variorum GitHub App.
+2. Variorum **understands it** — mapping the code, discovering documentation, and ingesting the history behind it.
+3. On every pull request, it surfaces **insights** — documentation drift, risky changes, and untested scenarios — each with evidence.
+4. Your team **stays in sync** — ask why the system is the way it is, and merge proposed fixes with one review.
+
+## Tech stack
+
+**Frontend** — Next.js 15 (App Router), React 19, TypeScript (strict), Tailwind CSS,
+shadcn-style components, framer-motion, recharts.
+
+**Backend** — FastAPI, Pydantic v2, SQLAlchemy 2.0, Alembic, Uvicorn, httpx, PyJWT.
+
+**Database** — PostgreSQL 17.
+
+**Code analysis** — tree-sitter + tree-sitter-language-pack.
+
+**AI** — a provider-agnostic layer over Google Gemini, DeepSeek, and Perplexity, called
+over REST with automatic fallback. Embeddings via Gemini.
+
+**Integration** — a GitHub App (not an OAuth App) for least-privilege, per-installation
+repository access.
+
+## Local development
+
+### Prerequisites
 
 - Python 3.11+ (developed on 3.13)
 - Node.js 20+ (developed on 24)
-- Docker (for local PostgreSQL 17)
-- A GitHub App (see below) — only needed for the GitHub-integration features
+- PostgreSQL 17 (native, or via the bundled `docker-compose.yml`)
+- A GitHub App — only needed for the GitHub-integration features (see [`SETUP.md`](./SETUP.md))
 
-## Quick start (local)
+### Setup
 
 ```bash
-# 1. Environment
-cp .env.example .env         # then fill in values
+# 1. Environment — copy the template and fill in values (never commit .env)
+cp .env.example .env
 
-# 2. Database (PostgreSQL 17 via Docker)
+# 2. Database (optional Docker Postgres; publishes on host port 5433)
 docker compose up -d db
 
 # 3. Backend
 cd backend
 python -m venv .venv
-# Windows PowerShell:  .venv\Scripts\Activate.ps1
-# macOS/Linux/Git Bash: source .venv/bin/activate
+# Windows PowerShell:   .venv\Scripts\Activate.ps1
+# macOS / Linux / Git Bash:  source .venv/bin/activate
 pip install -r requirements.txt
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
@@ -60,71 +107,97 @@ uvicorn app.main:app --reload --port 8000
 cd frontend
 npm install
 npm run dev
-# App: http://localhost:3000
+# App: http://localhost:3000/dashboard
 ```
 
-> On Windows without `make`, run the commands above directly. The `Makefile`
-> targets assume a POSIX shell (Git Bash / WSL).
+> On Windows, run the commands directly — the `Makefile` targets assume a POSIX shell
+> (Git Bash / WSL). A `scripts/start-all.ps1` helper starts both services together.
 
-## Configuration
-
-All configuration is via environment variables documented in
-[`.env.example`](./.env.example). Highlights:
-
-- `DATABASE_URL` — PostgreSQL connection (defaults match `docker-compose.yml`).
-- AI provider keys — at least one is required for analysis features. Fallback
-  order: **Gemini key 1 → Gemini key 2 → DeepSeek → Perplexity**.
-- GitHub App credentials — see below.
-
-Secrets are **never** committed. `.env`, `*.pem`, and `secrets/` are git-ignored.
-
-## AI provider layer
-
-Application code never talks to a provider directly. It depends on the
-`AIService` interface; a `ProviderManager` selects providers and falls back
-automatically when a key is missing, out of quota, or erroring. Adding or
-reordering providers is a configuration change, not a code change. See
-[`backend/app/ai/`](./backend/app/ai/).
-
-## GitHub App setup
-
-Variorum uses a **GitHub App** (not an OAuth App) so it can read code and open
-pull requests with least-privilege, per-installation tokens.
-
-1. Go to **https://github.com/settings/apps** and click **New GitHub App**.
-2. **GitHub App name:** e.g. `variorum-dev`.
-3. **Homepage URL:** `http://localhost:3000`.
-4. **Callback URL** (user sign-in / OAuth): your public backend URL +
-   `/api/v1/auth/github/callback`.
-5. **Setup URL** (where GitHub sends users after install): your public backend
-   URL + `/api/v1/github/setup`, and tick **Redirect on update**.
-6. **Webhook URL:** your public backend URL + `/webhooks/github`. For local
-   development, tunnel it with [smee.io](https://smee.io) or `cloudflared` and
-   paste the tunnel URL.
-7. **Webhook secret:** generate a long random string; put the same value in
-   `.env` as `GITHUB_WEBHOOK_SECRET`.
-8. **Repository permissions:** Contents = *Read & write*, Pull requests =
-   *Read & write*, Metadata = *Read-only*.
-9. **Subscribe to events:** *Pull request*, *Push*, *Installation*, and
-   *Installation repositories*.
-10. Click **Create GitHub App**.
-11. On the App page, copy the **App ID** → `.env` `GITHUB_APP_ID`. Copy the
-    **Client ID** → `GITHUB_APP_CLIENT_ID`, generate a **client secret** →
-    `GITHUB_APP_CLIENT_SECRET`, and note the **slug** (from the App URL) →
-    `GITHUB_APP_SLUG`.
-12. Under **Private keys**, click **Generate a private key**. A `.pem` file
-    downloads. Save it to `backend/secrets/github-app.pem` (git-ignored) and set
-    `GITHUB_APP_PRIVATE_KEY_PATH` accordingly — or base64-encode it into
-    `GITHUB_APP_PRIVATE_KEY_BASE64`.
-
-## Testing
+### Verify your setup
 
 ```bash
-cd backend && pytest -q        # backend unit/integration tests
-cd frontend && npm run lint    # frontend lint
+cd backend && ./.venv/Scripts/python.exe scripts/check_env.py   # config sanity
+cd backend && ./.venv/Scripts/python.exe scripts/check_ai.py    # AI providers reachable
 ```
 
-## Status
+## Environment variables
 
-Phase 0 (foundation). Track progress in the build log at the end of
-[`PROJECT_PLAN.md`](./PROJECT_PLAN.md).
+All configuration is via environment variables. Copy [`.env.example`](./.env.example) to
+`.env` and fill in the values — every variable is documented there. Highlights:
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SESSION_SECRET` | Signs auth session cookies — set a long random value |
+| `CORS_ORIGINS` | Comma-separated allowlist of frontend origins |
+| `GEMINI_API_KEY_1` / `_2`, `DEEPSEEK_API_KEY`, `PERPLEXITY_API_KEY` | AI providers (at least one required); fallback order is Gemini 1 → Gemini 2 → DeepSeek → Perplexity |
+| `GITHUB_APP_ID`, `GITHUB_APP_CLIENT_ID/SECRET`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_APP_PRIVATE_KEY_*` | GitHub App credentials — see [`SETUP.md`](./SETUP.md) |
+
+**Secrets are never committed.** `.env`, `*.pem`, `*.key`, and `secrets/` are git-ignored.
+In production the backend refuses to start if `SESSION_SECRET`, `GITHUB_WEBHOOK_SECRET`,
+`DATABASE_URL`, or `CORS_ORIGINS` are left at insecure defaults.
+
+## Project structure
+
+```
+backend/
+  app/
+    api/routes/     auth, github, repositories, analysis, webhooks, system
+    ai/             provider-agnostic AI layer (base, manager, providers, service, embeddings)
+    services/       github/ (App auth, REST client, webhooks) · indexer/ · analysis/ · knowledge · qa
+    workers/        background jobs (indexing, PR analysis, risk, ingestion)
+    core/           config, logging, rate limiting
+    db/ · models/ · schemas/
+  alembic/          database migrations
+  tests/            pytest suite
+frontend/
+  src/app/          Next.js routes (landing + dashboard)
+  src/components/    UI + dashboard components
+  src/lib/          API client, utilities
+docs/adr/           architecture decision records
+scripts/            dev / setup helpers
+```
+
+See [`PROJECT_PLAN.md`](./PROJECT_PLAN.md) for the full product requirements,
+architecture, and build log, and [`SETUP.md`](./SETUP.md) for the GitHub App walkthrough.
+
+## Security
+
+Variorum is built for repository access, so security is a first-class concern:
+
+- No secrets are committed; environment handling is documented and validated at startup.
+- Every resource is ownership-scoped to the authenticated user.
+- The GitHub App uses least-privilege, per-installation tokens; webhook signatures are
+  verified with a constant-time HMAC comparison.
+- Generated changes always go to a dedicated branch and open a pull request — never a
+  direct write to the default branch, never an auto-merge, never a force-push.
+- Baseline security headers, CORS allowlisting, rate limiting on sensitive endpoints, and
+  generic client-facing errors (full detail logged server-side only).
+
+See [`SECURITY.md`](./SECURITY.md) for the security model and how to report a
+vulnerability, and [`PRODUCTION_CHECKLIST.md`](./PRODUCTION_CHECKLIST.md) before deploying.
+
+## Contributing
+
+Contributions are welcome. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the development
+setup, coding standards, and the pull request process.
+
+## Roadmap
+
+- **Phase 1 — Documentation Intelligence** ✅ *shipped*
+- **Phase 2 — Engineering Memory** ✅ *shipped*
+- **Phase 3 — AI Testing Intelligence** ✅ *shipped*
+- **Next** — richer repository insights, semantic search at scale (pgvector), team-level knowledge views.
+
+## Author
+
+**Muhammad Danish** — Full Stack Developer
+[emdanish.dev](https://emdanish.dev)
+
+Computer Science student and software developer focused on building practical SaaS
+products and AI-powered engineering tools. Built with Next.js, React, TypeScript,
+Tailwind CSS, FastAPI, Python, PostgreSQL, and AI/GitHub integrations.
+
+## License
+
+Released under the [MIT License](./LICENSE).
