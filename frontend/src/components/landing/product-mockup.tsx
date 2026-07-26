@@ -15,7 +15,7 @@ export function ProductMockup() {
         </span>
       </div>
 
-      <div className="grid grid-cols-[140px_1fr]">
+      <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr]">
         {/* sidebar */}
         <div className="hidden flex-col gap-1 border-r border-border p-3 sm:flex">
           {["Overview", "Repositories", "Insights", "Memory"].map((item, i) => (
@@ -33,7 +33,7 @@ export function ProductMockup() {
         </div>
 
         {/* content */}
-        <div className="space-y-3 p-4">
+        <div className="min-w-0 space-y-3 p-4">
           <div className="grid grid-cols-3 gap-2">
             {[
               { icon: BookMarked, label: "Repos", value: "11" },
@@ -70,7 +70,7 @@ export function ProductMockup() {
             <span className="rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[9px] font-medium uppercase text-warning">
               medium
             </span>
-            <span className="truncate font-mono text-[10px] text-muted-foreground">
+            <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
               docs/auth.md drifted from src/auth.py
             </span>
           </div>
