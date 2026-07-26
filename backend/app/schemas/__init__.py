@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class HealthResponse(BaseModel):
@@ -96,8 +96,8 @@ class GeneratedPRResponse(BaseModel):
 
 
 class AnalyzePrRequest(BaseModel):
-    pr_number: int
-    head_sha: str | None = None
+    pr_number: int = Field(gt=0)
+    head_sha: str | None = Field(default=None, max_length=64)
 
 
 class AnalyzePrResponse(BaseModel):
@@ -145,6 +145,30 @@ class RepositoryInsights(BaseModel):
     top_risk_paths: list[RiskPath]
 
 
+class GuideArea(BaseModel):
+    name: str
+    description: str
+    paths: list[str] = []
+
+
+class GuideDecision(BaseModel):
+    title: str
+    detail: str
+    source: str
+
+
+class RepositoryGuideResponse(BaseModel):
+    repository_id: int
+    summary: str
+    key_areas: list[GuideArea] = []
+    getting_started: list[str] = []
+    decisions: list[GuideDecision] = []
+    conventions: list[str] = []
+    provider: str | None = None
+    model: str | None = None
+    generated_at: datetime
+
+
 class TeamInsights(BaseModel):
     id: int
     installation_id: int
@@ -173,7 +197,7 @@ class RiskFindingResponse(BaseModel):
 
 
 class AskRequest(BaseModel):
-    question: str
+    question: str = Field(min_length=1, max_length=2000)
 
 
 class Citation(BaseModel):

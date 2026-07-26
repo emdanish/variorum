@@ -25,9 +25,20 @@ class Settings(BaseSettings):
     backend_public_url: str = "http://localhost:8000"
     frontend_url: str = "http://localhost:3000"
     session_secret: str = DEFAULT_SESSION_SECRET
+    # Session cookie SameSite policy. Use "lax" for same-site (local dev or a
+    # same-origin proxy). For a split-domain deploy (frontend and backend on
+    # different origins) set "none" — the cookie is then only sent over HTTPS
+    # (Secure is enabled automatically in production).
+    session_cookie_samesite: str = "lax"
     # Abuse protection on auth / webhook / AI endpoints. Disabled in the test
     # suite so repeated calls don't trip the limiter.
     rate_limit_enabled: bool = True
+
+    # SQLAlchemy connection pool sizing (per process). Tune against the
+    # database's max_connections and the number of running replicas.
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_recycle: int = 1800
 
     # NoDecode stops pydantic-settings from JSON-parsing the env value; the
     # validator below accepts a comma-separated string or a real list.

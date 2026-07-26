@@ -71,24 +71,6 @@ class AIService:
         )
         return json.loads(strip_json_fence(result.text)), result
 
-    async def complete_json(
-        self,
-        prompt: str,
-        *,
-        system: str | None = None,
-        temperature: float = 0.0,
-        max_tokens: int | None = None,
-        purpose: str = "generic_json",
-    ) -> dict[str, Any]:
-        data, _ = await self.complete_structured(
-            prompt,
-            system=system,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            purpose=purpose,
-        )
-        return data
-
 
 def build_provider_manager(settings: Settings) -> ProviderManager:
     """Wire providers in the required fallback order:

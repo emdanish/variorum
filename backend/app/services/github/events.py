@@ -70,7 +70,8 @@ def dispatch_webhook(db: Session, event: str, payload: dict) -> str:
     if event == "installation_repositories":
         return _handle_installation_repositories(db, payload)
     if event in {"pull_request", "push"}:
-        # Analysis is wired in milestone M3.
+        # PR analysis is enqueued directly by the webhook route; these events are
+        # acknowledged here without further action.
         return f"acknowledged:{event}"
     return f"ignored:{event}"
 

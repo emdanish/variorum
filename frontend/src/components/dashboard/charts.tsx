@@ -23,15 +23,18 @@ export const CHART_COLORS = {
   muted: "#6b7280",
 };
 
+// Theme-aware via CSS variables so tooltips/axes read correctly in light + dark.
 const TOOLTIP_STYLE = {
-  backgroundColor: "#0e0e16",
-  border: "1px solid #26263a",
+  backgroundColor: "hsl(var(--card))",
+  border: "1px solid hsl(var(--border))",
   borderRadius: 8,
   fontSize: 12,
-  color: "#e5e5ea",
+  color: "hsl(var(--foreground))",
 } as const;
 
-const AXIS = { fill: "#8b8b95", fontSize: 11 } as const;
+const AXIS = { fill: "hsl(var(--muted-foreground))", fontSize: 11 } as const;
+const CURSOR_FILL = "hsl(var(--foreground) / 0.05)";
+const CURSOR_STROKE = "hsl(var(--foreground) / 0.15)";
 
 export interface Slice {
   name: string;
@@ -88,7 +91,7 @@ export function Bars({ data, color }: { data: { name: string; value: number }[];
         <BarChart data={data} layout="vertical" margin={{ left: 8, right: 8 }}>
           <XAxis type="number" hide />
           <YAxis type="category" dataKey="name" width={70} tick={AXIS} axisLine={false} tickLine={false} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "#ffffff08" }} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: CURSOR_FILL }} />
           <Bar dataKey="value" radius={[0, 4, 4, 0]}>
             {data.map((_, i) => (
               <Cell key={i} fill={color} />
@@ -115,7 +118,7 @@ export function ActivityArea({ data }: { data: { date: string; count: number }[]
           </defs>
           <XAxis dataKey="date" tick={AXIS} axisLine={false} tickLine={false} minTickGap={24} />
           <YAxis tick={AXIS} axisLine={false} tickLine={false} allowDecimals={false} width={28} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ stroke: "#ffffff20" }} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ stroke: CURSOR_STROKE }} />
           <Area
             type="monotone"
             dataKey="count"

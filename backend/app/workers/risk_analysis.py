@@ -115,7 +115,7 @@ def _run(
             )
         source = [f for f in pr_files if is_source_path(f.path)][:max_files]
 
-        assessed, errors = asyncio.run(_assess_all(db, repo.id, source, ai_service))
+        assessed, errors = asyncio.run(_assess_all(db, repo.id, source, ai_service, pr_number))
         if errors and not assessed:
             raise RuntimeError(f"all {errors} file assessment(s) failed")
 
@@ -159,7 +159,7 @@ def _run(
 
 
 async def _assess_all(
-    db: Session, repository_id: int, files: list[ChangedFile], ai: AIService
+    db: Session, repository_id: int, files: list[ChangedFile], ai: AIService, pr_number: int
 ) -> tuple[list[tuple[ChangedFile, RiskVerdict, FileSignals]], int]:
     results: list[tuple[ChangedFile, RiskVerdict, FileSignals]] = []
     errors = 0
@@ -170,5 +170,7 @@ async def _assess_all(
             results.append((changed, verdict, signals))
         except Exception as exc:  # noqa: BLE001 — isolate per-file failures
             errors += 1
-            logger.warning("risk assessment failed file=%s pr=%s: %s", changed.path, "?", exc)
+            logger.warning(
+                "risk assessment failed file=%s pr=%s: %s", changed.path, pr_number, exc
+            )
     return results, errors

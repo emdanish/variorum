@@ -1,28 +1,12 @@
 export const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 
-export interface Health {
-  status: string;
-  app: string;
-  environment: string;
-  ai_available: boolean;
-  ai_providers: string[];
-}
-
 export interface User {
   id: number;
   email: string;
   name: string | null;
   avatar_url: string | null;
   github_user_id: number | null;
-}
-
-export interface Installation {
-  id: number;
-  installation_id: number;
-  account_login: string;
-  account_type: string;
-  suspended: boolean;
 }
 
 export interface Repository {
@@ -78,6 +62,30 @@ export interface RepositoryInsights {
   knowledge_by_kind: Record<string, number>;
   activity: ActivityPoint[];
   top_risk_paths: RiskPath[];
+}
+
+export interface GuideArea {
+  name: string;
+  description: string;
+  paths: string[];
+}
+
+export interface GuideDecision {
+  title: string;
+  detail: string;
+  source: string;
+}
+
+export interface RepositoryGuide {
+  repository_id: number;
+  summary: string;
+  key_areas: GuideArea[];
+  getting_started: string[];
+  decisions: GuideDecision[];
+  conventions: string[];
+  provider: string | null;
+  model: string | null;
+  generated_at: string;
 }
 
 export interface TeamInsights {
@@ -191,16 +199,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const loginUrl = `${BACKEND_URL}/api/v1/auth/github/login`;
 
 export const api = {
-  health: () => request<Health>("/health"),
   systemStatus: () => request<SystemStatus>("/api/v1/system/status"),
   me: () => request<User>("/api/v1/auth/me"),
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
-  installations: () => request<Installation[]>("/api/v1/github/installations"),
   installUrl: () => request<{ install_url: string }>("/api/v1/github/install-url"),
   repositories: () => request<Repository[]>("/api/v1/repositories"),
   repository: (id: number) => request<RepositoryDetail>(`/api/v1/repositories/${id}`),
   repositoryInsights: (id: number) =>
     request<RepositoryInsights>(`/api/v1/repositories/${id}/insights`),
+  orientation: (id: number) =>
+    request<RepositoryGuide>(`/api/v1/repositories/${id}/orientation`),
+  generateOrientation: (id: number) =>
+    request<RepositoryGuide>(`/api/v1/repositories/${id}/orientation`, { method: "POST" }),
   jobs: (id: number) => request<Job[]>(`/api/v1/repositories/${id}/jobs`),
   teams: () => request<TeamInsights[]>("/api/v1/teams"),
   connectRepository: (id: number) =>
@@ -220,11 +230,6 @@ export const api = {
   analyzePr: (repoId: number, prNumber: number) =>
     request<{ status: string; pr_number: number }>(
       `/api/v1/repositories/${repoId}/analyze-pr`,
-      { method: "POST", body: JSON.stringify({ pr_number: prNumber }) },
-    ),
-  analyzeRisk: (repoId: number, prNumber: number) =>
-    request<{ status: string; pr_number: number }>(
-      `/api/v1/repositories/${repoId}/analyze-risk`,
       { method: "POST", body: JSON.stringify({ pr_number: prNumber }) },
     ),
   riskFindings: (repoId: number) =>

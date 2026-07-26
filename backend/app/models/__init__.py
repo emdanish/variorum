@@ -19,6 +19,7 @@ from app.models.enums import (
 )
 from app.models.github import GitHubInstallation, Repository
 from app.models.knowledge import KnowledgeEntry
+from app.models.orientation import RepositoryGuide
 from app.models.user import User
 
 __all__ = [
@@ -41,6 +42,7 @@ __all__ = [
     "LinkSource",
     "ProviderCall",
     "Repository",
+    "RepositoryGuide",
     "RiskFinding",
     "User",
 ]

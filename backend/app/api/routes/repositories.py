@@ -21,6 +21,7 @@ from app.models import (
     IndexingStatus,
     KnowledgeEntry,
     Repository,
+    RepositoryGuide,
     RiskFinding,
     User,
 )
@@ -32,16 +33,20 @@ from app.schemas import (
     AskResponse,
     Citation,
     FindingResponse,
+    GuideArea,
+    GuideDecision,
     IngestResponse,
     JobResponse,
     KnowledgeStats,
     RepositoryDetail,
+    RepositoryGuideResponse,
     RepositoryInsights,
     RepositoryResponse,
     RiskFindingResponse,
     RiskPath,
 )
 from app.services import insights as insights_svc
+from app.services import orientation as orientation_svc
 from app.services.qa import answer_question, retrieve
 from app.workers.indexing import run_index_job
 from app.workers.ingest import run_ingest_history_job
@@ -388,7 +393,7 @@ async def ask(
     entries = retrieve(db, repo.id, question, embedder=get_embedding_service())
     try:
         result = await answer_question(ai, question, entries)
-    except AllProvidersFailedError as exc:
+    except (AllProvidersFailedError, ValueError) as exc:
         logger.warning("ask AI request failed repo=%s: %s", repo.id, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -404,6 +409,93 @@ async def ask(
         provider=result.provider,
         model=result.model,
     )
+
+
+def _guide_to_response(guide: RepositoryGuide) -> RepositoryGuideResponse:
+    content = guide.content or {}
+    return RepositoryGuideResponse(
+        repository_id=guide.repository_id,
+        summary=guide.summary,
+        key_areas=[GuideArea(**a) for a in content.get("key_areas", [])],
+        getting_started=content.get("getting_started", []),
+        decisions=[GuideDecision(**d) for d in content.get("decisions", [])],
+        conventions=content.get("conventions", []),
+        provider=guide.provider,
+        model=guide.model,
+        generated_at=guide.updated_at,
+    )
+
+
+@router.get("/{repo_id}/orientation", response_model=RepositoryGuideResponse)
+def get_orientation(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RepositoryGuideResponse:
+    """Return the repository's onboarding guide, or 404 if none has been generated."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    guide = db.execute(
+        select(RepositoryGuide).where(RepositoryGuide.repository_id == repo.id)
+    ).scalar_one_or_none()
+    if guide is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No orientation guide yet. Generate one.",
+        )
+    return _guide_to_response(guide)
+
+
+@router.post("/{repo_id}/orientation", response_model=RepositoryGuideResponse)
+async def generate_orientation(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RepositoryGuideResponse:
+    """Generate (or regenerate) the repository's onboarding guide from its indexed
+    code, documentation, and engineering history."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+
+    symbol_count = db.scalar(
+        select(func.count()).select_from(CodeSymbol).where(CodeSymbol.repository_id == repo.id)
+    )
+    knowledge_count = db.scalar(
+        select(func.count())
+        .select_from(KnowledgeEntry)
+        .where(KnowledgeEntry.repository_id == repo.id)
+    )
+    if not symbol_count and not knowledge_count:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Index the repository (and optionally ingest its history) first.",
+        )
+
+    ai = get_ai_service()
+    if not ai.available:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No AI provider configured"
+        )
+
+    context = orientation_svc.build_context(db, repo)
+    try:
+        summary, content, provider, model = await orientation_svc.generate_orientation(ai, context)
+    except (AllProvidersFailedError, ValueError) as exc:
+        logger.warning("orientation generation failed repo=%s: %s", repo.id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI generation is unavailable right now. Please try again.",
+        ) from exc
+
+    if not summary:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not generate an orientation guide from the available data.",
+        )
+
+    guide = orientation_svc.upsert_guide(
+        db, repo.id, summary=summary, content=content, provider=provider, model=model
+    )
+    logger.info("orientation guide generated repo=%s provider=%s", repo.full_name, provider)
+    return _guide_to_response(guide)
 
 
 @router.post("/{repo_id}/connect", response_model=RepositoryResponse)

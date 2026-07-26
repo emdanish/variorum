@@ -7,10 +7,13 @@ import {
   ArrowLeft,
   Boxes,
   Brain,
+  Compass,
   FileText,
   Gauge,
+  GitCommitHorizontal,
   Loader2,
   Lock,
+  MapPin,
   Sparkles,
   ShieldAlert,
   TriangleAlert,
@@ -31,6 +34,7 @@ import {
   type Finding,
   type Job,
   type RepositoryDetail,
+  type RepositoryGuide,
   type RepositoryInsights,
   type RiskFinding,
 } from "@/lib/api";
@@ -78,6 +82,8 @@ export default function RepositoryDetailPage() {
   const [drift, setDrift] = useState<Finding[]>([]);
   const [risk, setRisk] = useState<RiskFinding[]>([]);
   const [insights, setInsights] = useState<RepositoryInsights | null>(null);
+  const [guide, setGuide] = useState<RepositoryGuide | null>(null);
+  const [generatingGuide, setGeneratingGuide] = useState(false);
   const [tab, setTab] = useState<"drift" | "risk">("drift");
   const [showDismissed, setShowDismissed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -86,21 +92,36 @@ export default function RepositoryDetailPage() {
     try {
       const detail = await api.repository(repoId);
       setRepo(detail);
-      const [jobsRes, driftRes, riskRes, insightsRes] = await Promise.all([
+      const [jobsRes, driftRes, riskRes, insightsRes, guideRes] = await Promise.all([
         api.jobs(repoId).catch(() => [] as Job[]),
         api.findings(repoId).catch(() => [] as Finding[]),
         api.riskFindings(repoId).catch(() => [] as RiskFinding[]),
         api.repositoryInsights(repoId).catch(() => null),
+        api.orientation(repoId).catch(() => null),
       ]);
       setJobs(jobsRes);
       setDrift(driftRes);
       setRisk(riskRes);
       setInsights(insightsRes);
+      setGuide(guideRes);
       setPhase("ready");
     } catch {
       setPhase("error");
     }
   }, [repoId]);
+
+  const onGenerateGuide = async () => {
+    setGeneratingGuide(true);
+    try {
+      const g = await api.generateOrientation(repoId);
+      setGuide(g);
+      toast.success("Orientation guide generated");
+    } catch (e) {
+      toast.error("Couldn't generate the guide", { description: (e as Error).message });
+    } finally {
+      setGeneratingGuide(false);
+    }
+  };
 
   useEffect(() => {
     if (Number.isNaN(repoId)) {
@@ -243,6 +264,12 @@ export default function RepositoryDetailPage() {
 
       {insights && <InsightsSection insights={insights} />}
 
+      <OrientationSection
+        guide={guide}
+        generating={generatingGuide}
+        onGenerate={() => void onGenerateGuide()}
+      />
+
       <div className="mt-8 grid gap-6 lg:grid-cols-[320px_1fr]">
         <JobsTimeline jobs={jobs} />
 
@@ -291,6 +318,142 @@ export default function RepositoryDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function OrientationSection({
+  guide,
+  generating,
+  onGenerate,
+}: {
+  guide: RepositoryGuide | null;
+  generating: boolean;
+  onGenerate: () => void;
+}) {
+  return (
+    <Card className="mt-4">
+      <CardHeader className="flex-row items-start justify-between space-y-0">
+        <div className="flex items-start gap-2.5">
+          <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-border bg-primary/10">
+            <Compass className="h-4.5 w-4.5 text-primary" />
+          </span>
+          <div>
+            <CardTitle className="text-base">Repository orientation</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              An AI onboarding guide from this repo&apos;s code, docs, and history.
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" disabled={generating} onClick={onGenerate}>
+          {generating ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-3.5 w-3.5" /> {guide ? "Regenerate" : "Generate guide"}
+            </>
+          )}
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {guide ? (
+          <div className="space-y-6">
+            <p className="text-sm leading-relaxed">{guide.summary}</p>
+
+            {guide.key_areas.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Key areas
+                </h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {guide.key_areas.map((area) => (
+                    <div key={area.name} className="rounded-lg border border-border bg-muted/20 p-3">
+                      <div className="text-sm font-medium">{area.name}</div>
+                      <p className="mt-1 text-xs text-muted-foreground">{area.description}</p>
+                      {area.paths.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {area.paths.map((p) => (
+                            <span
+                              key={p}
+                              className="rounded-md border border-border bg-background/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                            >
+                              {p}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {guide.getting_started.length > 0 && (
+              <div>
+                <h3 className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <MapPin className="h-3 w-3" /> Where to start
+                </h3>
+                <ol className="list-inside list-decimal space-y-1 text-sm text-muted-foreground">
+                  {guide.getting_started.map((step, i) => (
+                    <li key={i}>{step}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {guide.decisions.length > 0 && (
+              <div>
+                <h3 className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <GitCommitHorizontal className="h-3 w-3" /> Notable decisions
+                </h3>
+                <ul className="space-y-2.5">
+                  {guide.decisions.map((d, i) => (
+                    <li key={i} className="text-sm">
+                      <div className="font-medium">{d.title}</div>
+                      <p className="text-muted-foreground">{d.detail}</p>
+                      {d.source && (
+                        <span className="mt-1 inline-block font-mono text-[10px] text-primary">
+                          {d.source}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {guide.conventions.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Conventions
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {guide.conventions.map((c, i) => (
+                    <span
+                      key={i}
+                      className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground"
+                    >
+                      {c}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-[10px] text-muted-foreground">
+              Generated {fmt(guide.generated_at)}
+              {guide.provider ? ` · ${guide.provider}` : ""}
+            </p>
+          </div>
+        ) : (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No orientation guide yet. Generate one to get a cited tour of this repository —
+            what it is, its key areas, where to start, and the decisions behind it.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
