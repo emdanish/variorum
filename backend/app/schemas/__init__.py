@@ -318,6 +318,52 @@ class HealthScore(BaseModel):
     doc_coverage_pct: float
 
 
+class PortfolioRepo(BaseModel):
+    repository_id: int
+    full_name: str
+    indexing_status: str
+    health_score: int
+    health_level: str
+    doc_coverage_pct: float
+    single_owner_modules: int
+    drift_open: int
+    risk_high: int
+    top_hotspot: str | None = None
+
+
+class PortfolioSummary(BaseModel):
+    repo_count: int
+    avg_health: int
+    at_risk: int
+    total_single_owner: int
+
+
+class Portfolio(BaseModel):
+    repos: list[PortfolioRepo] = []
+    summary: PortfolioSummary
+
+
+class ModuleCount(BaseModel):
+    module: str
+    changes: int
+
+
+class Expert(BaseModel):
+    author: str
+    changes: int
+    churn: int
+    repos: list[str] = []
+    top_modules: list[ModuleCount] = []
+    languages: list[str] = []
+    prs_authored: int = 0
+    last_active: datetime | None = None
+
+
+class ExpertDirectory(BaseModel):
+    query: str | None = None
+    experts: list[Expert] = []
+
+
 class TeamInsights(BaseModel):
     id: int
     installation_id: int
