@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     perplexity_api_key: str = ""
 
+    # Use the pgvector acceleration path for semantic search when the extension
+    # and column are present. Set false to force the in-process cosine fallback.
+    pgvector_enabled: bool = True
+
     gemini_model: str = "gemini-flash-latest"
     deepseek_model: str = "deepseek-v4-flash"
     perplexity_model: str = "sonar"
