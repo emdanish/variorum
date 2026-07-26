@@ -155,6 +155,8 @@ export const api = {
     ),
   riskFindings: (repoId: number) =>
     request<RiskFinding[]>(`/api/v1/repositories/${repoId}/risk-findings`),
+  generateTests: (findingId: number) =>
+    request<GeneratedPR>(`/api/v1/risk-findings/${findingId}/generate-tests`, { method: "POST" }),
   ingestHistory: (repoId: number) =>
     request<{ status: string; repository_id: number }>(
       `/api/v1/repositories/${repoId}/ingest-history`,

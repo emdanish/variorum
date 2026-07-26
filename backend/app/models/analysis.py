@@ -68,6 +68,9 @@ class GeneratedPR(Base, TimestampMixin):
     drift_finding_id: Mapped[int | None] = mapped_column(
         ForeignKey("drift_findings.id", ondelete="SET NULL"), unique=True
     )
+    risk_finding_id: Mapped[int | None] = mapped_column(
+        ForeignKey("risk_findings.id", ondelete="SET NULL"), unique=True
+    )
     repository_id: Mapped[int] = mapped_column(
         ForeignKey("repositories.id", ondelete="CASCADE"), index=True, nullable=False
     )

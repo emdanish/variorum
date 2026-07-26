@@ -13,14 +13,17 @@ from app.models import (
     FindingStatus,
     GitHubInstallation,
     Repository,
+    RiskFinding,
     User,
 )
 from app.schemas import FindingResponse, GeneratedPRResponse, JobDetail
 from app.services.analysis.doc_pr import create_doc_fix_pr
+from app.services.analysis.test_pr import create_test_pr
 from app.services.github.client import GitHubClient
 
 jobs_router = APIRouter(prefix="/jobs", tags=["analysis"])
 findings_router = APIRouter(prefix="/findings", tags=["analysis"])
+risk_findings_router = APIRouter(prefix="/risk-findings", tags=["analysis"])
 
 
 def finding_to_response(finding: DriftFinding) -> FindingResponse:
@@ -139,6 +142,62 @@ async def open_doc_fix_pr(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="No documentation change was generated for this finding.",
+        )
+    return GeneratedPRResponse(
+        id=result.generated_pr_id,
+        finding_id=finding.id,
+        pr_number=result.pr_number,
+        branch=result.branch,
+        url=result.url,
+        state="open",
+        reused=result.reused,
+    )
+
+
+def _owned_risk_finding(db: Session, user_id: int, finding_id: int) -> RiskFinding:
+    finding = db.execute(
+        select(RiskFinding)
+        .join(AnalysisJob, RiskFinding.analysis_job_id == AnalysisJob.id)
+        .join(Repository, AnalysisJob.repository_id == Repository.id)
+        .join(GitHubInstallation, Repository.installation_id == GitHubInstallation.id)
+        .where(RiskFinding.id == finding_id, GitHubInstallation.owner_user_id == user_id)
+    ).scalar_one_or_none()
+    if finding is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Risk finding not found")
+    return finding
+
+
+@risk_findings_router.post("/{finding_id}/generate-tests", response_model=GeneratedPRResponse)
+async def generate_tests(
+    finding_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> GeneratedPRResponse:
+    finding = _owned_risk_finding(db, user.id, finding_id)
+    ai = get_ai_service()
+    if not ai.available:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No AI provider configured"
+        )
+    client = GitHubClient(get_github_auth())
+    try:
+        result = await create_test_pr(db, finding, client=client, ai=ai)
+    except AllProvidersFailedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI generation failed: {exc}"
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        detail = f"GitHub API error ({exc.response.status_code}). Check the App's permissions."
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"GitHub request failed: {exc}"
+        ) from exc
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No tests were generated for this finding.",
         )
     return GeneratedPRResponse(
         id=result.generated_pr_id,

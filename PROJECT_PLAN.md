@@ -749,7 +749,16 @@ CI-verified test PRs.
   /repositories/{id}/analyze-risk` + `GET /repositories/{id}/risk-findings`; a
   "Testing intelligence" dashboard card. 121 tests, mypy + ruff clean. Verified
   live on variorum PR #1 (medium risk, concrete untested scenarios).
-- **M9 — Test-PR generation (next):** for a risky/uncovered file, generate a
-  test file via the AI and open a test PR through the GitHub App (reusing the
-  doc-fix PR machinery). The repository's existing CI verifies it; humans review
-  and merge.
+- **M9 — Test-PR generation (complete):** for a risk finding, the AI generates a
+  test file (written to a non-colliding `*_variorum` path so it never overwrites
+  real tests) and opens a test PR through the GitHub App (reusing the doc-fix PR
+  machinery: branch → commit → PR, idempotent per finding via
+  `generated_prs.risk_finding_id`). `POST /risk-findings/{id}/generate-tests` +
+  a "Generate tests PR" button on each risk finding. The repository's existing
+  CI verifies the PR; humans review and merge. 128 tests, mypy + ruff clean.
+  Verified live: generated correct pytest tests for a real source file.
+
+**Phase 3 complete.** All three product surfaces from the PRD are now built:
+Documentation Intelligence (Phase 1), Engineering Memory (Phase 2), and Testing
+Intelligence (Phase 3) — each following the same detect/answer → propose loop
+with a human review gate.
