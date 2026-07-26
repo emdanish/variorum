@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { CalendarClock, Flame, Loader2, Slack } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -165,8 +166,8 @@ export function DigestCard({
             )}
           </>
         )}
-        {slackReady && !quiet && (
-          <div className="mt-4 flex justify-end border-t border-border/60 pt-3">
+        <div className="mt-4 flex items-center justify-end gap-3 border-t border-border/60 pt-3">
+          {slackReady ? (
             <Button variant="outline" size="sm" disabled={sending} onClick={() => void sendToSlack()}>
               {sending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -175,8 +176,15 @@ export function DigestCard({
               )}
               Send to Slack
             </Button>
-          </div>
-        )}
+          ) : (
+            <Link
+              href="/dashboard/settings"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary hover:underline"
+            >
+              <Slack className="h-3.5 w-3.5" /> Connect Slack to send this digest
+            </Link>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
