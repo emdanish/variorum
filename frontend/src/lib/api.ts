@@ -235,6 +235,50 @@ export interface ContradictionReport {
   contradictions: ContradictionItem[];
 }
 
+export interface PortfolioRepo {
+  repository_id: number;
+  full_name: string;
+  indexing_status: string;
+  health_score: number;
+  health_level: string;
+  doc_coverage_pct: number;
+  single_owner_modules: number;
+  drift_open: number;
+  risk_high: number;
+  top_hotspot: string | null;
+}
+
+export interface Portfolio {
+  repos: PortfolioRepo[];
+  summary: {
+    repo_count: number;
+    avg_health: number;
+    at_risk: number;
+    total_single_owner: number;
+  };
+}
+
+export interface ModuleCount {
+  module: string;
+  changes: number;
+}
+
+export interface Expert {
+  author: string;
+  changes: number;
+  churn: number;
+  repos: string[];
+  top_modules: ModuleCount[];
+  languages: string[];
+  prs_authored: number;
+  last_active: string | null;
+}
+
+export interface ExpertDirectory {
+  query: string | null;
+  experts: Expert[];
+}
+
 export interface TeamInsights {
   id: number;
   installation_id: number;
@@ -376,6 +420,9 @@ export const api = {
   contradictions: (id: number, prNumber: number) =>
     request<ContradictionReport>(`/api/v1/repositories/${id}/contradictions/${prNumber}`),
   teams: () => request<TeamInsights[]>("/api/v1/teams"),
+  portfolio: () => request<Portfolio>("/api/v1/portfolio"),
+  experts: (q?: string) =>
+    request<ExpertDirectory>(`/api/v1/experts${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   connectRepository: (id: number) =>
     request<Repository>(`/api/v1/repositories/${id}/connect`, { method: "POST" }),
   findings: (repoId: number) =>

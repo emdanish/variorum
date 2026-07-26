@@ -6,11 +6,13 @@ import {
   Brain,
   FolderGit2,
   LayoutDashboard,
+  LayoutGrid,
   Lightbulb,
   Moon,
   RefreshCw,
   Search,
   Sun,
+  UserSearch,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -71,7 +73,9 @@ export function CommandPalette() {
     const nav: Command[] = [
       { id: "nav-overview", label: "Overview", group: "Navigate", icon: LayoutDashboard, run: go("/dashboard") },
       { id: "nav-repos", label: "Repositories", group: "Navigate", icon: FolderGit2, run: go("/dashboard/repositories") },
+      { id: "nav-portfolio", label: "Portfolio", group: "Navigate", icon: LayoutGrid, run: go("/dashboard/portfolio") },
       { id: "nav-insights", label: "Insights", group: "Navigate", icon: Lightbulb, run: go("/dashboard/insights") },
+      { id: "nav-experts", label: "Experts", group: "Navigate", icon: UserSearch, run: go("/dashboard/experts") },
       { id: "nav-teams", label: "Teams", group: "Navigate", icon: Users, run: go("/dashboard/teams") },
       { id: "nav-memory", label: "Engineering memory", group: "Navigate", icon: Brain, run: go("/dashboard/memory") },
     ];
