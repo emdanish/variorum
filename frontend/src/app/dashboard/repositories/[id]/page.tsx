@@ -274,7 +274,11 @@ export default function RepositoryDetailPage() {
         defaultBranch={repo.default_branch}
       />
 
-      <DigestCard repoId={repo.id} />
+      <DigestCard
+        repoId={repo.id}
+        repoFullName={repo.full_name}
+        defaultBranch={repo.default_branch}
+      />
 
       {insights && (
         <InsightsSection

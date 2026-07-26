@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, type DigestReport } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, ghBlobUrl } from "@/lib/utils";
 
 function healthColor(score: number): string {
   if (score >= 80) return "text-success";
@@ -23,7 +23,15 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
-export function DigestCard({ repoId }: { repoId: number }) {
+export function DigestCard({
+  repoId,
+  repoFullName,
+  defaultBranch,
+}: {
+  repoId: number;
+  repoFullName: string;
+  defaultBranch: string;
+}) {
   const [loading, setLoading] = useState(true);
   const [digest, setDigest] = useState<DigestReport | null>(null);
 
@@ -88,7 +96,15 @@ export function DigestCard({ repoId }: { repoId: number }) {
                   {digest.top_hotspots.map((h) => (
                     <li key={h.path} className="flex items-center gap-2 text-xs">
                       <Badge tone={h.level === "critical" ? "danger" : "warning"}>{h.score}</Badge>
-                      <span className="truncate font-mono text-muted-foreground">{h.path}</span>
+                      <a
+                        href={ghBlobUrl(repoFullName, defaultBranch, h.path)}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`Open ${h.path} on GitHub`}
+                        className="truncate font-mono text-muted-foreground hover:text-primary hover:underline"
+                      >
+                        {h.path}
+                      </a>
                     </li>
                   ))}
                 </ul>
@@ -100,11 +116,30 @@ export function DigestCard({ repoId }: { repoId: number }) {
                   Recently ingested
                 </div>
                 <ul className="space-y-1">
-                  {digest.recent_knowledge.map((k) => (
-                    <li key={`${k.kind}:${k.source_ref}`} className="truncate text-xs text-muted-foreground">
-                      <span className="font-mono">{k.kind.replace("_", " ")}</span> {k.title}
-                    </li>
-                  ))}
+                  {digest.recent_knowledge.map((k) =>
+                    k.url ? (
+                      <li key={`${k.kind}:${k.source_ref}`}>
+                        <a
+                          href={k.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={`Open ${k.kind.replace("_", " ")} ${k.source_ref} on GitHub`}
+                          className="block truncate text-xs text-muted-foreground hover:text-primary hover:underline"
+                        >
+                          <span className="font-mono">{k.kind.replace("_", " ")} {k.source_ref}</span>{" "}
+                          {k.title}
+                        </a>
+                      </li>
+                    ) : (
+                      <li
+                        key={`${k.kind}:${k.source_ref}`}
+                        className="truncate text-xs text-muted-foreground"
+                      >
+                        <span className="font-mono">{k.kind.replace("_", " ")} {k.source_ref}</span>{" "}
+                        {k.title}
+                      </li>
+                    ),
+                  )}
                 </ul>
               </div>
             )}
