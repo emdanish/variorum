@@ -66,17 +66,28 @@ async def setup_callback(
     settings: Settings = Depends(get_settings),
 ) -> RedirectResponse:
     """GitHub redirects here after an App install/update (the App's Setup URL).
-    We sync the installation and its repositories, linking to the logged-in user."""
+    We sync the installation and its repositories, linking to the logged-in user.
+    Requires an authenticated session, and never links an installation that is
+    already owned by a different user (see upsert_installation's owner-guard)."""
     frontend = settings.frontend_url.rstrip("/")
+    if user is None:
+        return RedirectResponse(f"{frontend}/dashboard?error=login_required")
     try:
         client = GitHubClient(auth)
-        owner_user_id = user.id if user else None
-        inst = await sync_installation_via_api(db, client, installation_id, owner_user_id)
+        inst = await sync_installation_via_api(db, client, installation_id, user.id)
+        if inst.owner_user_id != user.id:
+            logger.warning(
+                "setup rejected: installation %s already owned by user %s (actor %s)",
+                installation_id,
+                inst.owner_user_id,
+                user.id,
+            )
+            return RedirectResponse(f"{frontend}/dashboard?error=already_linked")
         logger.info(
             "installation synced id=%s account=%s user=%s",
             inst.installation_id,
             inst.account_login,
-            owner_user_id,
+            user.id,
         )
         return RedirectResponse(f"{frontend}/dashboard?connected={inst.account_login}")
     except Exception as exc:  # noqa: BLE001 — callback must always redirect, never 500

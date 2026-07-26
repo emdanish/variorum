@@ -251,6 +251,25 @@ class GitHubClient:
         data = resp.json()
         return PullRequestResult(number=data["number"], url=data["html_url"])
 
+    async def find_open_pull_request(
+        self, installation_id: int, full_name: str, head_branch: str
+    ) -> PullRequestResult | None:
+        """Find an open PR for a head branch, so a retried doc-fix reuses the
+        existing PR instead of failing on a duplicate."""
+        owner = full_name.split("/")[0]
+        headers = await self._installation_headers(installation_id)
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            resp = await client.get(
+                f"{GITHUB_API}/repos/{full_name}/pulls",
+                headers=headers,
+                params={"head": f"{owner}:{head_branch}", "state": "open"},
+            )
+        resp.raise_for_status()
+        items = resp.json()
+        if not items:
+            return None
+        return PullRequestResult(number=items[0]["number"], url=items[0]["html_url"])
+
 
 def _parse_repo(r: dict) -> RepoInfo:
     return RepoInfo(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -106,6 +107,9 @@ async def create_doc_fix_pr(
     branch = _branch_name(finding.id)
     base_sha = await client.get_branch_sha(inst_id, repo.full_name, base)
     await client.create_branch(inst_id, repo.full_name, branch, base_sha)
+    # Use the file's sha on the branch, not on base: a retried run may have
+    # already committed to the branch, making the base sha stale (409).
+    _, branch_sha = await client.get_file(inst_id, repo.full_name, document.path, branch)
     await client.put_file(
         inst_id,
         repo.full_name,
@@ -113,16 +117,25 @@ async def create_doc_fix_pr(
         f"docs: update {document.path} to match code changes",
         new_content,
         branch,
-        blob_sha,
+        branch_sha or blob_sha,
     )
-    pr = await client.create_pull_request(
-        inst_id,
-        repo.full_name,
-        title=f"Update {document.path} to match code changes",
-        head=branch,
-        base=base,
-        body=_pr_body(finding, evidence),
-    )
+    try:
+        pr = await client.create_pull_request(
+            inst_id,
+            repo.full_name,
+            title=f"Update {document.path} to match code changes",
+            head=branch,
+            base=base,
+            body=_pr_body(finding, evidence),
+        )
+    except httpx.HTTPStatusError as exc:
+        # A PR for this branch may already exist (retry) — reuse it.
+        if exc.response.status_code != 422:
+            raise
+        existing_pr = await client.find_open_pull_request(inst_id, repo.full_name, branch)
+        if existing_pr is None:
+            raise
+        pr = existing_pr
 
     generated = GeneratedPR(
         drift_finding_id=finding.id,

@@ -129,6 +129,23 @@ def test_worker_skips_when_doc_content_missing(db_session):
     assert ai.calls == []  # AI never consulted when the doc can't be fetched
 
 
+def test_reanalysis_supersedes_prior_findings(db_session):
+    repo, doc = _seed(db_session)
+    ai = FakeAI(
+        {"drifted": True, "severity": "high", "summary": "Auth moved to JWT", "evidence": []}
+    )
+    fetch = lambda _p: "Auth uses session cookies."  # noqa: E731
+
+    run_pr_analysis_job(repo.id, 42, db=db_session, pr_files=_PR_FILES, doc_fetcher=fetch, ai=ai)
+    run_pr_analysis_job(repo.id, 42, db=db_session, pr_files=_PR_FILES, doc_fetcher=fetch, ai=ai)
+
+    # Only the latest run's finding for this PR should remain — no duplicates.
+    findings = db_session.execute(
+        select(DriftFinding).where(DriftFinding.document_id == doc.id)
+    ).scalars().all()
+    assert len(findings) == 1
+
+
 def test_worker_fails_without_ai_provider(db_session):
     repo, _ = _seed(db_session)
     ai = FakeAI({}, available=False)

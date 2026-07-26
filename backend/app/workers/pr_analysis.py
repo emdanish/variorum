@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.ai.service import AIService, get_ai_service
@@ -83,6 +84,8 @@ def _run(
     db.commit()
     job_id = job.id
 
+    _supersede_prior_findings(db, repo.id, pr_number, keep_job_id=job.id)
+
     try:
         ai_service = ai or get_ai_service()
         if not ai_service.available:
@@ -149,6 +152,31 @@ def _run(
         db.commit()
         logger.warning("pr analysis failed repo_id=%s pr=%s: %s", repository_id, pr_number, exc)
         return None
+
+
+def _supersede_prior_findings(
+    db: Session, repository_id: int, pr_number: int, *, keep_job_id: int
+) -> None:
+    """Remove earlier *un-actioned* drift findings for the same PR so repeated
+    analysis (webhook + manual, or a new commit) doesn't accumulate duplicates.
+    Findings that already produced a PR (status != detected) are preserved."""
+    prior_ids = (
+        db.execute(
+            select(DriftFinding.id)
+            .join(AnalysisJob, DriftFinding.analysis_job_id == AnalysisJob.id)
+            .where(
+                AnalysisJob.repository_id == repository_id,
+                AnalysisJob.id != keep_job_id,
+                DriftFinding.status == FindingStatus.detected,
+                DriftFinding.evidence["pr_number"].astext == str(pr_number),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if prior_ids:
+        db.execute(delete(DriftFinding).where(DriftFinding.id.in_(prior_ids)))
+        db.commit()
 
 
 async def _analyze(

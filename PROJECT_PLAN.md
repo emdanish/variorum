@@ -645,3 +645,70 @@ pull request that changes documented code.
   PRs.
 - Durable job queue (replace `BackgroundTasks`), response caching, and
   observability dashboards.
+
+### Post-MVP security & robustness review (complete)
+An independent review pass hardened the live path:
+- **Installation ownership** can no longer be hijacked — `upsert_installation`
+  never reassigns an installation to a different owner, and `setup_callback`
+  requires login and confirms ownership.
+- **Session secret** is enforced (startup fails in production if left default);
+  the session cookie sets `https_only` in production + explicit `SameSite`.
+- **Account identity** is keyed strictly on `github_user_id` (no email-based
+  linking, which could merge accounts).
+- **Doc-fix PRs are idempotent**: unique constraint on
+  `generated_prs.drift_finding_id`, blob sha read from the branch (not base),
+  and an already-existing PR is reused instead of erroring.
+- **Installation tokens are cached** until near expiry (fewer token mints / less
+  rate-limit pressure).
+- **Gemini API key** is sent via the `x-goog-api-key` header, never the URL, so
+  it can't leak into logs.
+- **Re-analysis no longer duplicates findings** — prior un-actioned findings for
+  the same PR are superseded.
+- Known limitations kept for later: malformed-provider-JSON isn't
+  fallback-eligible (mitigated per-doc); background jobs are fire-and-forget
+  (needs a durable queue for production).
+
+**Verification:** 91 tests, mypy + ruff clean, all four AI providers confirmed
+live.
+
+---
+
+## Phase 2 — Engineering Memory (design)
+
+**Goal:** preserve engineering decisions and history so the team can ask *why*
+the system is the way it is — answered from real artifacts, with citations, and
+never an unsupported claim.
+
+### Data model (new tables)
+- **knowledge_entries** — `id`, `repository_id → repositories`, `kind`
+  (commit | pull_request | issue | review), `source_ref` (sha / PR# / issue#),
+  `title`, `body` (text), `url`, `author`, `occurred_at`, `content_hash`
+  (dedupe/idempotent re-ingest), `created_at`. Indexed on
+  `(repository_id, kind)` and a Postgres full-text `tsvector` (GIN) over
+  `title || body`. A nullable `pgvector` embedding column is added in M7.
+- **ask_queries** *(optional, observability)* — record questions asked, the
+  entries retrieved, and which provider answered.
+
+### Milestones
+- **M5 — History ingestion:** `knowledge_entries` model + migration; GitHub
+  client methods to list commits / pull requests / issues (paginated, capped);
+  an ingestion service + background job (idempotent on `content_hash`); an API
+  to trigger ingestion and report status. Reuses the installation-token client.
+- **M6 — Retrieval + cited Q&A:** PostgreSQL full-text retrieval (ranked by
+  relevance + recency); `POST /repositories/{id}/ask` → retrieve top-K entries →
+  build a tightly-scoped prompt → AI answers **only** from the provided context
+  **with citations** (each claim references an entry's `source_ref`/`url`); if
+  the context is insufficient, it says so. Frontend "Ask" panel showing the
+  answer + citation chips.
+- **M7 — Semantic search:** add embeddings via the AI layer (Gemini embedding
+  model) into a `pgvector` column; hybrid keyword + vector retrieval.
+
+### Principles carried over
+- Evidence-first: every answer cites its sources; refuse rather than fabricate.
+- Provider-agnostic AI via the existing fallback layer.
+- Bounded context sent to models (top-K retrieval, truncation), never whole
+  histories.
+- Human-in-the-loop remains for any write actions.
+
+**Starting point:** M5 (history ingestion) — the data foundation the Q&A builds
+on.

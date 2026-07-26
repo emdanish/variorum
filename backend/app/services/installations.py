@@ -35,7 +35,10 @@ def upsert_installation(
     else:
         inst.account_login = account_login
         inst.account_type = account_type
-        if owner_user_id is not None:
+        # Only claim ownership if currently unowned or already owned by the same
+        # user. Never reassign an installation away from its existing owner —
+        # that would let one user hijack another's installation.
+        if owner_user_id is not None and inst.owner_user_id in (None, owner_user_id):
             inst.owner_user_id = owner_user_id
 
     inst.suspended_at = datetime.now(UTC) if suspended else None

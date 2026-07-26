@@ -61,9 +61,13 @@ class GeminiProvider(AIProvider):
             async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
                 response = await client.post(
                     url,
-                    params={"key": self._api_key},
                     json=payload,
-                    headers={"Content-Type": "application/json"},
+                    headers={
+                        "Content-Type": "application/json",
+                        # Send the key in a header, never the URL query string, so
+                        # it can't leak into logs via request URLs on errors.
+                        "x-goog-api-key": self._api_key,
+                    },
                 )
         except httpx.HTTPError as exc:
             raise wrap_transport_error(self.name, exc) from exc

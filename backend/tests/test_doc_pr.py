@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 from sqlalchemy import func, select
 
 from app.models import (
@@ -24,8 +25,14 @@ pytestmark = requires_db
 
 
 class FakeGitHubClient:
-    def __init__(self, *, file_content: str | None = "# Auth\n\nUses cookies.\n"):
+    def __init__(
+        self,
+        *,
+        file_content: str | None = "# Auth\n\nUses cookies.\n",
+        pr_conflict: bool = False,
+    ):
         self.file_content = file_content
+        self.pr_conflict = pr_conflict
         self.created_branches: list[tuple[str, str]] = []
         self.put_files: list[tuple[str, str, str, str | None]] = []
         self.prs: list[dict] = []
@@ -43,8 +50,16 @@ class FakeGitHubClient:
         self.put_files.append((path, content, branch, sha))
 
     async def create_pull_request(self, _inst, _full, *, title, head, base, body):
+        if self.pr_conflict:
+            request = httpx.Request("POST", "https://api.github.com/repos/acme/app/pulls")
+            raise httpx.HTTPStatusError(
+                "422", request=request, response=httpx.Response(422, request=request)
+            )
         self.prs.append({"title": title, "head": head, "base": base, "body": body})
         return PullRequestResult(number=101, url="https://github.com/acme/app/pull/101")
+
+    async def find_open_pull_request(self, _inst, _full, _branch):
+        return PullRequestResult(number=55, url="https://github.com/acme/app/pull/55")
 
 
 def _seed_finding(db, *, summary="Auth switched to JWT") -> DriftFinding:
@@ -144,6 +159,18 @@ async def test_create_doc_fix_pr_no_change_returns_none(db_session):
     assert client.prs == []
     db_session.refresh(finding)
     assert finding.status == FindingStatus.detected
+
+
+async def test_create_doc_fix_pr_reuses_existing_pr_on_conflict(db_session):
+    finding = _seed_finding(db_session)
+    client = FakeGitHubClient(pr_conflict=True)  # create PR returns 422 (already exists)
+    ai = FakeAI(text="# Auth\n\nUses JWT tokens.\n")
+
+    result = await create_doc_fix_pr(db_session, finding, client=client, ai=ai)
+
+    assert result is not None
+    assert result.pr_number == 55  # reused the existing PR found by find_open_pull_request
+    assert result.url == "https://github.com/acme/app/pull/55"
 
 
 async def test_create_doc_fix_pr_missing_doc_returns_none(db_session):

@@ -18,13 +18,27 @@ def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
 
+    _DEFAULT_SESSION_SECRET = "dev-insecure-session-secret-change-me"
+    if settings.is_production and (
+        not settings.session_secret or settings.session_secret == _DEFAULT_SESSION_SECRET
+    ):
+        raise RuntimeError(
+            "SESSION_SECRET must be set to a strong random value in production "
+            "(it signs auth session cookies)."
+        )
+
     app = FastAPI(
         title=f"{settings.app_name} API",
         version="0.0.1",
         description="Engineering knowledge infrastructure — backend API.",
     )
 
-    app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.session_secret,
+        https_only=settings.is_production,
+        same_site="lax",
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

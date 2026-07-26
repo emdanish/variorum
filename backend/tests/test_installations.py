@@ -61,6 +61,24 @@ def test_upsert_installation_preserves_owner_when_not_provided(db_session):
     assert inst.owner_user_id == user.id
 
 
+def test_upsert_installation_does_not_reassign_to_different_owner(db_session):
+    u1 = User(email="owner1@example.com", github_user_id=1001)
+    u2 = User(email="owner2@example.com", github_user_id=1002)
+    db_session.add_all([u1, u2])
+    db_session.flush()
+
+    upsert_installation(
+        db_session, installation_id=99, account_login="a", account_type="User",
+        owner_user_id=u1.id,
+    )
+    # A second user must not be able to claim an installation owned by u1.
+    inst = upsert_installation(
+        db_session, installation_id=99, account_login="a", account_type="User",
+        owner_user_id=u2.id,
+    )
+    assert inst.owner_user_id == u1.id
+
+
 def test_upsert_repository_is_idempotent(db_session):
     inst = upsert_installation(
         db_session, installation_id=3, account_login="a", account_type="User"

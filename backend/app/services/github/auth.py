@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -11,6 +12,7 @@ import jwt
 from app.core.config import Settings
 
 GITHUB_API = "https://api.github.com"
+_TOKEN_REFRESH_BUFFER_S = 120  # refresh a bit before the ~1h token actually expires
 
 
 class GitHubConfigError(RuntimeError):
@@ -30,6 +32,7 @@ class GitHubAppAuth:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._private_key: str | None = None
+        self._token_cache: dict[int, InstallationToken] = {}
 
     def _load_private_key(self) -> str:
         if self._private_key is not None:
@@ -62,6 +65,10 @@ class GitHubAppAuth:
         return jwt.encode(payload, self._load_private_key(), algorithm="RS256")
 
     async def get_installation_token(self, installation_id: int) -> InstallationToken:
+        cached = self._token_cache.get(installation_id)
+        if cached is not None and not _token_expiring(cached):
+            return cached
+
         app_jwt = self.create_app_jwt()
         headers = {
             "Authorization": f"Bearer {app_jwt}",
@@ -76,4 +83,14 @@ class GitHubAppAuth:
                 f"Failed to mint installation token ({response.status_code}): {response.text[:300]}"
             )
         data = response.json()
-        return InstallationToken(token=data["token"], expires_at=data["expires_at"])
+        token = InstallationToken(token=data["token"], expires_at=data["expires_at"])
+        self._token_cache[installation_id] = token
+        return token
+
+
+def _token_expiring(token: InstallationToken) -> bool:
+    try:
+        expiry = datetime.fromisoformat(token.expires_at.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    return (expiry - datetime.now(UTC)).total_seconds() <= _TOKEN_REFRESH_BUFFER_S
