@@ -762,3 +762,28 @@ CI-verified test PRs.
 Documentation Intelligence (Phase 1), Engineering Memory (Phase 2), and Testing
 Intelligence (Phase 3) — each following the same detect/answer → propose loop
 with a human review gate.
+
+---
+
+## Environment, skills & tooling
+
+**Permanent memory:** [`CLAUDE.md`](./CLAUDE.md) is the entry point for every
+session (stack, architecture, conventions, skills, library decisions, the $0
+rule, dev commands, gotchas).
+
+**Claude Code skills.** Rather than install unvetted third-party plugins (and to
+honor the $0 / no-supply-chain-risk rule), the project uses:
+- **Built-in skills**: `security-review`, `code-review`/`review`, `simplify`,
+  `init`, `dataviz`, `artifact-design`, `ai-writing-tropes`.
+- **Project skills** in `.claude/skills/` (versioned in the repo, auto-loaded):
+  `variorum-frontend`, `variorum-ui-ux`, `variorum-backend`, `variorum-python`,
+  `variorum-security`, `variorum-testing`, `variorum-git-github`,
+  `variorum-docs` — each encodes Variorum's actual conventions for its domain.
+
+**Libraries.** No new dependencies were added during environment prep — the
+stack was evaluated and is already minimal and all-free. Chosen tools and
+rejected alternatives (Celery/Redis, Supabase, vendor AI SDKs, numpy, pgvector-
+for-now) are documented with rationale in `CLAUDE.md`.
+
+**Cost:** $0 — open-source libraries, native PostgreSQL, free-tier AI keys
+behind a fallback layer, and a free GitHub App.
