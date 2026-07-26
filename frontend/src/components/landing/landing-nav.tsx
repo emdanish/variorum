@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, Menu, X } from "lucide-react";
 import { Logo } from "@/components/brand";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { loginUrl } from "@/lib/api";
 
@@ -31,6 +32,7 @@ export function LandingNav() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
+          <ThemeToggle />
           <a href={loginUrl}>
             <Button variant="ghost" size="sm">
               Sign in

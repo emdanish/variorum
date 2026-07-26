@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
-import { Toaster } from "sonner";
+import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/theme-provider";
+import { ThemedToaster } from "@/components/themed-toaster";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -32,16 +33,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`dark ${inter.variable} ${mono.variable}`}>
+    <html lang="en" className={`dark ${inter.variable} ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-screen font-sans antialiased">
-        {children}
-        <Toaster
-          theme="dark"
-          position="top-right"
-          richColors
-          closeButton
-          toastOptions={{ classNames: { toast: "font-sans" } }}
-        />
+        <ThemeProvider>
+          {children}
+          <ThemedToaster />
+        </ThemeProvider>
       </body>
     </html>
   );

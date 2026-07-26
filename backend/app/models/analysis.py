@@ -59,6 +59,7 @@ class RiskFinding(Base, TimestampMixin):
     risk_level: Mapped[DriftSeverity] = mapped_column(default=DriftSeverity.low, nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     evidence: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="open", nullable=False)
 
 
 class GeneratedPR(Base, TimestampMixin):

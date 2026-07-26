@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
+  ArrowUpRight,
   ChevronLeft,
   ChevronRight,
   Github,
@@ -108,7 +110,13 @@ export default function RepositoriesPage() {
                 className="flex flex-wrap items-center justify-between gap-3 p-4 transition-colors hover:bg-accent/30"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm">{repo.full_name}</span>
+                  <Link
+                    href={`/dashboard/repositories/${repo.id}`}
+                    className="group flex items-center gap-1 font-mono text-sm hover:text-primary"
+                  >
+                    {repo.full_name}
+                    <ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+                  </Link>
                   {repo.private && (
                     <span title="Private">
                       <Lock className="h-3 w-3 text-muted-foreground" />

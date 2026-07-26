@@ -213,6 +213,7 @@ def list_risk_findings(
             path=f.path,
             risk_level=f.risk_level.value,
             summary=f.summary,
+            status=f.status,
             pr_number=(f.evidence or {}).get("pr_number"),
             has_tests=(f.evidence or {}).get("has_tests"),
             untested_scenarios=(f.evidence or {}).get("untested_scenarios") or [],

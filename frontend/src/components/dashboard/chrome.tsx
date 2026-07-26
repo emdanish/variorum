@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AlertTriangle, Github, X } from "lucide-react";
 import { Logo } from "@/components/brand";
+import { CommandPalette } from "@/components/dashboard/command-palette";
 import { useDashboard } from "@/components/dashboard/provider";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Topbar } from "@/components/dashboard/topbar";
@@ -49,6 +50,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         <Topbar onMenu={() => setMobileNav(true)} />
         <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">{children}</main>
       </div>
+
+      <CommandPalette />
     </div>
   );
 }

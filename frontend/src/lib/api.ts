@@ -35,6 +35,23 @@ export interface Repository {
   last_indexed_at: string | null;
 }
 
+export interface RepositoryDetail extends Repository {
+  symbol_count: number;
+  document_count: number;
+}
+
+export interface Job {
+  id: number;
+  type: string;
+  status: string;
+  trigger: string;
+  external_ref: string | null;
+  error: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
 export interface Finding {
   id: number;
   analysis_job_id: number;
@@ -78,6 +95,7 @@ export interface RiskFinding {
   path: string;
   risk_level: string;
   summary: string;
+  status: string;
   pr_number: number | null;
   has_tests: boolean | null;
   untested_scenarios: string[];
@@ -137,12 +155,22 @@ export const api = {
   installations: () => request<Installation[]>("/api/v1/github/installations"),
   installUrl: () => request<{ install_url: string }>("/api/v1/github/install-url"),
   repositories: () => request<Repository[]>("/api/v1/repositories"),
+  repository: (id: number) => request<RepositoryDetail>(`/api/v1/repositories/${id}`),
+  jobs: (id: number) => request<Job[]>(`/api/v1/repositories/${id}/jobs`),
   connectRepository: (id: number) =>
     request<Repository>(`/api/v1/repositories/${id}/connect`, { method: "POST" }),
   findings: (repoId: number) =>
     request<Finding[]>(`/api/v1/repositories/${repoId}/findings`),
   openDocFixPr: (findingId: number) =>
     request<GeneratedPR>(`/api/v1/findings/${findingId}/open-pr`, { method: "POST" }),
+  dismissFinding: (findingId: number) =>
+    request<Finding>(`/api/v1/findings/${findingId}/dismiss`, { method: "POST" }),
+  restoreFinding: (findingId: number) =>
+    request<Finding>(`/api/v1/findings/${findingId}/restore`, { method: "POST" }),
+  dismissRiskFinding: (findingId: number) =>
+    request<RiskFinding>(`/api/v1/risk-findings/${findingId}/dismiss`, { method: "POST" }),
+  restoreRiskFinding: (findingId: number) =>
+    request<RiskFinding>(`/api/v1/risk-findings/${findingId}/restore`, { method: "POST" }),
   analyzePr: (repoId: number, prNumber: number) =>
     request<{ status: string; pr_number: number }>(
       `/api/v1/repositories/${repoId}/analyze-pr`,

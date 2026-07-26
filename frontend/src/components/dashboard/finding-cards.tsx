@@ -1,12 +1,45 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, FileText, GitPullRequest, Loader2, ShieldAlert } from "lucide-react";
+import {
+  ChevronDown,
+  FileText,
+  GitPullRequest,
+  Loader2,
+  RotateCcw,
+  ShieldAlert,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Badge, severityTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api, type Finding, type RiskFinding } from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+function useTriage<T>(
+  dismiss: () => Promise<T>,
+  restore: () => Promise<T>,
+  onChange?: (updated: T) => void,
+) {
+  const [busy, setBusy] = useState(false);
+  const run = async (fn: () => Promise<T>, ok: string) => {
+    setBusy(true);
+    try {
+      const updated = await fn();
+      onChange?.(updated);
+      toast.success(ok);
+    } catch (e) {
+      toast.error("Couldn't update finding", { description: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return {
+    busy,
+    onDismiss: () => void run(dismiss, "Finding dismissed"),
+    onRestore: () => void run(restore, "Finding restored"),
+  };
+}
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
@@ -27,7 +60,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export function DriftFindingCard({ finding }: { finding: Finding }) {
+export function DriftFindingCard({
+  finding,
+  onChange,
+}: {
+  finding: Finding;
+  onChange?: (updated: Finding) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [prUrl, setPrUrl] = useState<string | null>(null);
@@ -37,6 +76,13 @@ export function DriftFindingCard({ finding }: { finding: Finding }) {
   const evidence = (ev.drift_evidence as string[]) ?? [];
   const suggested = ev.suggested_update as string | undefined;
   const provider = ev.provider as string | undefined;
+
+  const dismissed = finding.status === "dismissed";
+  const triage = useTriage(
+    () => api.dismissFinding(finding.id),
+    () => api.restoreFinding(finding.id),
+    onChange,
+  );
 
   const onOpenPr = async () => {
     setBusy(true);
@@ -52,7 +98,12 @@ export function DriftFindingCard({ finding }: { finding: Finding }) {
   };
 
   return (
-    <div className="rounded-xl border border-border bg-card transition-colors hover:border-border/80">
+    <div
+      className={cn(
+        "rounded-xl border border-border bg-card transition-colors hover:border-border/80",
+        dismissed && "opacity-60",
+      )}
+    >
       <div className="flex items-start justify-between gap-3 p-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -60,6 +111,7 @@ export function DriftFindingCard({ finding }: { finding: Finding }) {
               <FileText className="h-3.5 w-3.5 text-muted-foreground" />
             </span>
             <Badge tone={severityTone(finding.severity)}>{finding.severity}</Badge>
+            {dismissed && <Badge tone="outline">Dismissed</Badge>}
             {finding.pr_number && <Chip>PR #{finding.pr_number}</Chip>}
             {finding.document_path && (
               <span className="truncate font-mono text-xs text-muted-foreground">
@@ -69,19 +121,39 @@ export function DriftFindingCard({ finding }: { finding: Finding }) {
           </div>
           <p className="mt-2.5 text-sm leading-relaxed">{finding.summary}</p>
         </div>
-        <div className="flex-none">
-          {finding.status === "pr_opened" && !prUrl ? (
-            <Badge tone="success">PR opened</Badge>
-          ) : prUrl ? (
-            <a href={prUrl} target="_blank" rel="noreferrer">
-              <Button variant="outline" size="sm">
-                View PR
-              </Button>
-            </a>
-          ) : (
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => void onOpenPr()}>
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Open doc-fix PR"}
+        <div className="flex flex-none items-center gap-1.5">
+          {dismissed ? (
+            <Button variant="ghost" size="sm" disabled={triage.busy} onClick={triage.onRestore}>
+              <RotateCcw className="h-3.5 w-3.5" /> Restore
             </Button>
+          ) : (
+            <>
+              {finding.status === "pr_opened" && !prUrl ? (
+                <Badge tone="success">PR opened</Badge>
+              ) : prUrl ? (
+                <a href={prUrl} target="_blank" rel="noreferrer">
+                  <Button variant="outline" size="sm">
+                    View PR
+                  </Button>
+                </a>
+              ) : (
+                <Button variant="outline" size="sm" disabled={busy} onClick={() => void onOpenPr()}>
+                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Open doc-fix PR"}
+                </Button>
+              )}
+              {finding.status !== "pr_opened" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Dismiss finding"
+                  aria-label="Dismiss finding"
+                  disabled={triage.busy}
+                  onClick={triage.onDismiss}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -144,9 +216,22 @@ export function DriftFindingCard({ finding }: { finding: Finding }) {
   );
 }
 
-export function RiskFindingCard({ finding }: { finding: RiskFinding }) {
+export function RiskFindingCard({
+  finding,
+  onChange,
+}: {
+  finding: RiskFinding;
+  onChange?: (updated: RiskFinding) => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [prUrl, setPrUrl] = useState<string | null>(null);
+
+  const dismissed = finding.status === "dismissed";
+  const triage = useTriage(
+    () => api.dismissRiskFinding(finding.id),
+    () => api.restoreRiskFinding(finding.id),
+    onChange,
+  );
 
   const onGenerate = async () => {
     setBusy(true);
@@ -162,7 +247,12 @@ export function RiskFindingCard({ finding }: { finding: RiskFinding }) {
   };
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-border/80">
+    <div
+      className={cn(
+        "rounded-xl border border-border bg-card p-4 transition-colors hover:border-border/80",
+        dismissed && "opacity-60",
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -170,29 +260,48 @@ export function RiskFindingCard({ finding }: { finding: RiskFinding }) {
               <ShieldAlert className="h-3.5 w-3.5 text-muted-foreground" />
             </span>
             <Badge tone={severityTone(finding.risk_level)}>{finding.risk_level} risk</Badge>
+            {dismissed && <Badge tone="outline">Dismissed</Badge>}
             {finding.pr_number && <Chip>PR #{finding.pr_number}</Chip>}
             <span className="truncate font-mono text-xs text-muted-foreground">{finding.path}</span>
             {finding.has_tests === false && <Badge tone="warning">no tests</Badge>}
           </div>
           <p className="mt-2.5 text-sm leading-relaxed">{finding.summary}</p>
         </div>
-        <div className="flex-none">
-          {prUrl ? (
-            <a href={prUrl} target="_blank" rel="noreferrer">
-              <Button variant="outline" size="sm">
-                View PR
-              </Button>
-            </a>
-          ) : (
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => void onGenerate()}>
-              {busy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <>
-                  <GitPullRequest className="h-3.5 w-3.5" /> Generate tests
-                </>
-              )}
+        <div className="flex flex-none items-center gap-1.5">
+          {dismissed ? (
+            <Button variant="ghost" size="sm" disabled={triage.busy} onClick={triage.onRestore}>
+              <RotateCcw className="h-3.5 w-3.5" /> Restore
             </Button>
+          ) : (
+            <>
+              {prUrl ? (
+                <a href={prUrl} target="_blank" rel="noreferrer">
+                  <Button variant="outline" size="sm">
+                    View PR
+                  </Button>
+                </a>
+              ) : (
+                <Button variant="outline" size="sm" disabled={busy} onClick={() => void onGenerate()}>
+                  {busy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      <GitPullRequest className="h-3.5 w-3.5" /> Generate tests
+                    </>
+                  )}
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                title="Dismiss finding"
+                aria-label="Dismiss finding"
+                disabled={triage.busy}
+                onClick={triage.onDismiss}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </>
           )}
         </div>
       </div>

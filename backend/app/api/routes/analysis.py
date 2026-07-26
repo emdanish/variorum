@@ -16,7 +16,7 @@ from app.models import (
     RiskFinding,
     User,
 )
-from app.schemas import FindingResponse, GeneratedPRResponse, JobDetail
+from app.schemas import FindingResponse, GeneratedPRResponse, JobDetail, RiskFindingResponse
 from app.services.analysis.doc_pr import create_doc_fix_pr
 from app.services.analysis.test_pr import create_test_pr
 from app.services.github.client import GitHubClient
@@ -24,6 +24,21 @@ from app.services.github.client import GitHubClient
 jobs_router = APIRouter(prefix="/jobs", tags=["analysis"])
 findings_router = APIRouter(prefix="/findings", tags=["analysis"])
 risk_findings_router = APIRouter(prefix="/risk-findings", tags=["analysis"])
+
+
+def risk_to_response(finding: RiskFinding) -> RiskFindingResponse:
+    evidence = finding.evidence or {}
+    return RiskFindingResponse(
+        id=finding.id,
+        path=finding.path,
+        risk_level=finding.risk_level.value,
+        summary=finding.summary,
+        status=finding.status,
+        pr_number=evidence.get("pr_number"),
+        has_tests=evidence.get("has_tests"),
+        untested_scenarios=evidence.get("untested_scenarios") or [],
+        created_at=finding.created_at,
+    )
 
 
 def finding_to_response(finding: DriftFinding) -> FindingResponse:
@@ -104,6 +119,34 @@ def get_finding(
     db: Session = Depends(get_db),
 ) -> FindingResponse:
     return finding_to_response(_owned_finding(db, user.id, finding_id))
+
+
+@findings_router.post("/{finding_id}/dismiss", response_model=FindingResponse)
+def dismiss_finding(
+    finding_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FindingResponse:
+    finding = _owned_finding(db, user.id, finding_id)
+    if finding.status != FindingStatus.pr_opened:
+        finding.status = FindingStatus.dismissed
+        db.commit()
+        db.refresh(finding)
+    return finding_to_response(finding)
+
+
+@findings_router.post("/{finding_id}/restore", response_model=FindingResponse)
+def restore_finding(
+    finding_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FindingResponse:
+    finding = _owned_finding(db, user.id, finding_id)
+    if finding.status == FindingStatus.dismissed:
+        finding.status = FindingStatus.detected
+        db.commit()
+        db.refresh(finding)
+    return finding_to_response(finding)
 
 
 @findings_router.post("/{finding_id}/open-pr", response_model=GeneratedPRResponse)
@@ -208,3 +251,29 @@ async def generate_tests(
         state="open",
         reused=result.reused,
     )
+
+
+@risk_findings_router.post("/{finding_id}/dismiss", response_model=RiskFindingResponse)
+def dismiss_risk_finding(
+    finding_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RiskFindingResponse:
+    finding = _owned_risk_finding(db, user.id, finding_id)
+    finding.status = "dismissed"
+    db.commit()
+    db.refresh(finding)
+    return risk_to_response(finding)
+
+
+@risk_findings_router.post("/{finding_id}/restore", response_model=RiskFindingResponse)
+def restore_risk_finding(
+    finding_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RiskFindingResponse:
+    finding = _owned_risk_finding(db, user.id, finding_id)
+    finding.status = "open"
+    db.commit()
+    db.refresh(finding)
+    return risk_to_response(finding)

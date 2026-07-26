@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { LogOut, Menu, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { LogOut, Menu, RefreshCw, Search } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/provider";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 
@@ -24,6 +25,12 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
     }
   };
 
+  const [mac, setMac] = useState(false);
+  useEffect(() => {
+    setMac(/Mac|iPhone|iPad/.test(navigator.platform));
+  }, []);
+
+  const openPalette = () => window.dispatchEvent(new Event("variorum:command-palette"));
   const initial = (user?.name || user?.email || "?").charAt(0).toUpperCase();
 
   return (
@@ -36,11 +43,25 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
         <Menu className="h-5 w-5" />
       </button>
 
+      <button
+        onClick={openPalette}
+        className="hidden items-center gap-2 rounded-md border border-border bg-card/50 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent sm:flex"
+        aria-label="Open command palette"
+      >
+        <Search className="h-4 w-4" />
+        <span>Search…</span>
+        <kbd className="ml-6 rounded border border-border px-1.5 py-0.5 font-mono text-[10px]">
+          {mac ? "⌘" : "Ctrl"} K
+        </kbd>
+      </button>
+
       <div className="flex flex-1 items-center justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onRefresh} disabled={refreshing}>
           <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
           <span className="hidden sm:inline">Refresh</span>
         </Button>
+
+        <ThemeToggle />
 
         <div className="flex items-center gap-2 rounded-full border border-border py-1 pl-1 pr-3">
           {user?.avatar_url ? (

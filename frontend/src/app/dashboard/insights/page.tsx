@@ -13,29 +13,32 @@ const PAGE_SIZE = 6;
 const LEVELS = ["all", "high", "medium", "low"] as const;
 
 export default function InsightsPage() {
-  const { findings, risk } = useDashboard();
+  const { findings, risk, patchFinding, patchRisk } = useDashboard();
   const [tab, setTab] = useState<"drift" | "risk">("drift");
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState<(typeof LEVELS)[number]>("all");
+  const [showDismissed, setShowDismissed] = useState(false);
   const [page, setPage] = useState(0);
 
   const drift = useMemo(() => {
     const q = query.toLowerCase();
     return findings.filter(
       (f) =>
+        (showDismissed || f.status !== "dismissed") &&
         (level === "all" || f.severity === level) &&
         (`${f.document_path ?? ""} ${f.summary}`.toLowerCase().includes(q)),
     );
-  }, [findings, query, level]);
+  }, [findings, query, level, showDismissed]);
 
   const risks = useMemo(() => {
     const q = query.toLowerCase();
     return risk.filter(
       (r) =>
+        (showDismissed || r.status !== "dismissed") &&
         (level === "all" || r.risk_level === level) &&
         `${r.path} ${r.summary}`.toLowerCase().includes(q),
     );
-  }, [risk, query, level]);
+  }, [risk, query, level, showDismissed]);
 
   const active = tab === "drift" ? drift : risks;
   const pageCount = Math.max(1, Math.ceil(active.length / PAGE_SIZE));
@@ -90,13 +93,28 @@ export default function InsightsPage() {
             </button>
           ))}
         </div>
+        <button
+          onClick={() => { setShowDismissed((v) => !v); reset(); }}
+          className={cn(
+            "rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+            showDismissed
+              ? "bg-accent text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {showDismissed ? "Hide dismissed" : "Show dismissed"}
+        </button>
       </div>
 
       {shown.length > 0 ? (
         <div className="space-y-3">
           {tab === "drift"
-            ? (shown as typeof drift).map((f) => <DriftFindingCard key={f.id} finding={f} />)
-            : (shown as typeof risks).map((r) => <RiskFindingCard key={r.id} finding={r} />)}
+            ? (shown as typeof drift).map((f) => (
+                <DriftFindingCard key={f.id} finding={f} onChange={patchFinding} />
+              ))
+            : (shown as typeof risks).map((r) => (
+                <RiskFindingCard key={r.id} finding={r} onChange={patchRisk} />
+              ))}
         </div>
       ) : (
         <EmptyInsights tab={tab} filtered={query !== "" || level !== "all"} />

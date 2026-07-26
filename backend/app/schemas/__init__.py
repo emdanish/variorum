@@ -122,6 +122,7 @@ class RiskFindingResponse(BaseModel):
     path: str
     risk_level: str
     summary: str
+    status: str = "open"
     pr_number: int | None = None
     has_tests: bool | None = None
     untested_scenarios: list[str] = []

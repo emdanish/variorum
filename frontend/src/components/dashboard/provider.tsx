@@ -25,6 +25,8 @@ interface DashboardState {
   reloadAll: () => Promise<void>;
   refreshData: () => Promise<void>;
   patchRepo: (repo: Repository) => void;
+  patchFinding: (finding: Finding) => void;
+  patchRisk: (finding: RiskFinding) => void;
 }
 
 const DashboardContext = createContext<DashboardState | null>(null);
@@ -102,6 +104,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     setRepos((prev) => prev.map((r) => (r.id === repo.id ? repo : r)));
   }, []);
 
+  const patchFinding = useCallback((finding: Finding) => {
+    setFindings((prev) => prev.map((f) => (f.id === finding.id ? finding : f)));
+  }, []);
+
+  const patchRisk = useCallback((finding: RiskFinding) => {
+    setRisk((prev) => prev.map((f) => (f.id === finding.id ? finding : f)));
+  }, []);
+
   useEffect(() => {
     void reloadAll();
   }, [reloadAll]);
@@ -120,6 +130,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         reloadAll,
         refreshData,
         patchRepo,
+        patchFinding,
+        patchRisk,
       }}
     >
       {children}
