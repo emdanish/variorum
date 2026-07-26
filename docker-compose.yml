@@ -10,7 +10,8 @@ services:
       POSTGRES_PASSWORD: variorum
       POSTGRES_DB: variorum
     ports:
-      # Host 5433 avoids clashing with a native PostgreSQL commonly on 5432.
+      # Host 5433 avoids clashing with a native PostgreSQL on 5432. If you use
+      # this container instead of a native server, set DATABASE_URL to :5433.
       - "5433:5432"
     volumes:
       - variorum_pgdata:/var/lib/postgresql/data

@@ -29,7 +29,7 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000"]
     )
 
-    database_url: str = "postgresql+psycopg://variorum:variorum@localhost:5433/variorum"
+    database_url: str = "postgresql+psycopg://variorum:variorum@localhost:5432/variorum"
 
     gemini_api_key_1: str = ""
     gemini_api_key_2: str = ""
