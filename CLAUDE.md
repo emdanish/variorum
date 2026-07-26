@@ -59,22 +59,27 @@ change without re-verifying via `backend/scripts/check_ai.py`):
 
 ```
 backend/app/
-  main.py            FastAPI factory
-  core/              config (pydantic-settings), logging
-  db/                engine/session, declarative base
-  models/            SQLAlchemy models + StrEnum enums
+  main.py            FastAPI factory (+ security headers, catch-all handler, rate-limit wiring)
+  core/              config (pydantic-settings), logging, ratelimit
+  db/                engine/session (pooled), declarative base
+  models/            SQLAlchemy models + StrEnum enums (incl. RepositoryGuide)
   schemas/           Pydantic request/response
-  api/routes/        auth, github, repositories, analysis, system, webhooks
+  api/routes/        auth, github, repositories, analysis, teams, system, webhooks
   ai/                provider-agnostic AI layer (base, manager, providers/, service, embeddings)
   services/
     github/          App auth, OAuth, REST client, webhook verify, events, installations
     indexer/         tree-sitter code index, doc discovery, doc↔code linker, archive, pipeline
     analysis/        drift, doc_pr, docfix, pr_context, risk, testgen, test_pr
-    knowledge.py, qa.py, users.py
+    knowledge.py, qa.py, insights.py, orientation.py, users.py
   workers/           indexing, pr_analysis, risk_analysis, ingest (BackgroundTasks)
 backend/alembic/     migrations         backend/tests/     pytest suite (+ conftest, _fakes)
-backend/scripts/     check_env.py, check_ai.py
-frontend/src/        app/ (routes), components/ (+ ui/), lib/ (api.ts, utils.ts)
+backend/scripts/     check_env.py, check_ai.py     backend/Dockerfile + entrypoint.sh
+frontend/src/
+  app/               landing + dashboard routes (overview, repositories, repositories/[id],
+                     insights, teams, memory)
+  components/        ui/, dashboard/ (chrome, sidebar, topbar, provider, charts, finding-cards,
+                     command-palette), theme-provider/toggle/themed-toaster, landing/
+  lib/               api.ts, utils.ts
 docs/adr/            architecture decision records
 .claude/skills/      project skills (see below)
 ```
@@ -120,7 +125,7 @@ Chosen and *why*, with rejected alternatives — do not re-litigate without reas
 - **PyJWT[crypto]** — RS256 App JWTs; standard.
 - **tree-sitter + tree-sitter-language-pack** over regex/LLM parsing — deterministic, fast, prebuilt grammars.
 - **AI over REST (no vendor SDKs)** — the `AIProvider` interface + `ProviderManager` give free provider swapping/fallback; SDKs would add weight and lock-in.
-- **Postgres full-text (tsvector) + in-process cosine** for semantic search — **pgvector is the intended production store but is not installed on the native PG**, so embeddings are JSONB ranked in Python (fine at this scale). Upgrade path documented in `PROJECT_PLAN.md`.
+- **Postgres full-text (tsvector) + embeddings** for semantic search — embeddings are JSONB ranked with in-process cosine by default; an **optional pgvector path** (guarded migration `c7d2f1a9b4e0` + `PGVECTOR_ENABLED`, auto-detected via `pgvector_active()` in `services/qa.py`) uses an indexed `<=>` query when the extension is present, and falls back to JSONB otherwise. `alembic upgrade head` never fails without pgvector.
 - **Next.js + Tailwind + shadcn-style** (copy-in components, no heavy UI dep) over MUI/Chakra — matches the dev-tool aesthetic, minimal deps, full control.
 - **Rejected / deferred:** Celery/Redis queue (using `BackgroundTasks` for MVP), Supabase (using plain Postgres per PRD), numpy (pure-Python cosine avoids the dep), vendor AI SDKs.
 
@@ -132,7 +137,7 @@ Add a dependency only when it clearly beats the above and is free.
 
 - **Code style:** self-documenting names; comments explain *why*, never restate code. Python line length 100; `from __future__ import annotations`; `StrEnum` enums.
 - **Green gate before commit:** `ruff check .` + `mypy app` + `pytest` (backend) and `tsc --noEmit` + `npm run lint` (frontend) must pass. Every feature ships with tests.
-- **Security:** ownership-scope every resource; never commit/log secrets; least-privilege GitHub App; verify webhook HMAC; human-review gate on generated PRs. (See `variorum-security`.)
+- **Security:** ownership-scope every resource; never commit/log secrets; least-privilege GitHub App (Contents/PR R/W, Issues read, Metadata); verify webhook HMAC; human-review gate on generated PRs. Production posture: fail-fast config validation (`config.production_security_issues`), security headers + HSTS, generic client errors + catch-all handler, in-process rate limiting (`core/ratelimit`), configurable session-cookie SameSite. (See `variorum-security`, `SECURITY.md`, `PRODUCTION_DEPLOYMENT_GUIDE.md`.)
 - **Git:** conventional commits with the Co-Authored-By trailer; confirm `.env`/secrets are git-ignored before committing. (See `variorum-git-github`.)
 - **Docs:** update the `PROJECT_PLAN.md` build log + this file when milestones land or conventions change.
 

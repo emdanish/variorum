@@ -44,6 +44,9 @@ Variorum ships three product surfaces:
 | 📄 **Documentation Intelligence** | When a pull request changes code, Variorum detects when documentation has drifted out of sync — with evidence for every claim — and can open a doc-fix pull request for review. |
 | 🧠 **Engineering Memory** | Ingests commit, PR, and issue history into a searchable knowledge store and answers *"why is the system this way?"* with citations. Keyword + semantic retrieval. |
 | 🛡️ **Testing Intelligence** | Scores the risk of each pull request, surfaces scenarios that look untested, and can open a test pull request for review. |
+| 🧭 **Repository Orientation** | Auto-generates a cited onboarding guide — what the repo is, its key areas, where to start, and the decisions behind it — by fusing the code index, documentation, and engineering history. |
+
+Plus **repository & team insights** — documentation-health scores, risk breakdowns, activity, and per-organization rollups across every connected repository.
 
 Underpinning all three:
 
@@ -142,21 +145,25 @@ In production the backend refuses to start if `SESSION_SECRET`, `GITHUB_WEBHOOK_
 ```
 backend/
   app/
-    api/routes/     auth, github, repositories, analysis, webhooks, system
+    api/routes/     auth, github, repositories, analysis, teams, webhooks, system
     ai/             provider-agnostic AI layer (base, manager, providers, service, embeddings)
-    services/       github/ (App auth, REST client, webhooks) · indexer/ · analysis/ · knowledge · qa
+    services/       github/ · indexer/ · analysis/ · knowledge · qa · insights · orientation
     workers/        background jobs (indexing, PR analysis, risk, ingestion)
     core/           config, logging, rate limiting
     db/ · models/ · schemas/
   alembic/          database migrations
   tests/            pytest suite
+  Dockerfile        production backend image (+ entrypoint.sh)
 frontend/
-  src/app/          Next.js routes (landing + dashboard)
-  src/components/    UI + dashboard components
+  src/app/          Next.js routes (landing + dashboard: overview, repositories, [id],
+                    insights, teams, memory)
+  src/components/    UI, dashboard, theme (provider/toggle), command palette, charts
   src/lib/          API client, utilities
 docs/adr/           architecture decision records
 scripts/            dev / setup helpers
 ```
+
+See [`PRODUCTION_DEPLOYMENT_GUIDE.md`](./PRODUCTION_DEPLOYMENT_GUIDE.md) to deploy.
 
 See [`PROJECT_PLAN.md`](./PROJECT_PLAN.md) for the full product requirements,
 architecture, and build log, and [`SETUP.md`](./SETUP.md) for the GitHub App walkthrough.
@@ -187,7 +194,10 @@ setup, coding standards, and the pull request process.
 - **Phase 1 — Documentation Intelligence** ✅ *shipped*
 - **Phase 2 — Engineering Memory** ✅ *shipped*
 - **Phase 3 — AI Testing Intelligence** ✅ *shipped*
-- **Next** — richer repository insights, semantic search at scale (pgvector), team-level knowledge views.
+- **Repository & team insights** ✅ *shipped*
+- **Semantic search at scale (optional pgvector, auto-detected with fallback)** ✅ *shipped*
+- **Repository Orientation (onboarding guides)** ✅ *shipped*
+- **Next** — a durable background-job queue for horizontal scale, incremental re-indexing, more language grammars, and a shared/edge rate limiter.
 
 ## Author
 

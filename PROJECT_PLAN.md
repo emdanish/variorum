@@ -10,7 +10,10 @@ or agent) joining with zero prior context should be able to read this file and
 understand **what** we are building, **why**, **how**, **what is done**, and
 **what remains**.
 
-- **Status:** Phase 0 (foundation) — in progress
+- **Status:** All phases (0–3) shipped. Post-MVP: repository & team insights,
+  optional pgvector semantic search (auto-detected, with fallback), repository
+  orientation (onboarding guides), and a security/production-hardening pass —
+  all landed. See the build log at the end of this file.
 - **Last updated:** 2026-07-26
 - **Owner:** ai-team@elementaltv.com
 
@@ -201,10 +204,13 @@ reviewable PRs so contributors and users aren't misled.
 
 | Phase | Theme | Outcome | Target |
 |------:|-------|---------|--------|
-| 0 | Foundation | Repo, architecture, AI layer, GitHub App skeleton, DB schema | current |
-| 1 | Documentation Intelligence (MVP) | Doc-drift detection → doc-fix PRs | next |
-| 2 | Engineering Memory | Evidence-cited Q&A over repo history | after MVP validation |
-| 3 | Testing Intelligence | Risk + coverage → test PRs | later |
+| 0 | Foundation | Repo, architecture, AI layer, GitHub App skeleton, DB schema | ✅ shipped |
+| 1 | Documentation Intelligence (MVP) | Doc-drift detection → doc-fix PRs | ✅ shipped |
+| 2 | Engineering Memory | Evidence-cited Q&A over repo history | ✅ shipped |
+| 3 | Testing Intelligence | Risk + coverage → test PRs | ✅ shipped |
+| + | Insights & Teams | Repo/team analytics rollups | ✅ shipped |
+| + | Semantic search at scale | Optional pgvector, auto-detected + fallback | ✅ shipped |
+| + | Repository Orientation | Cited onboarding guides | ✅ shipped |
 
 ---
 
@@ -439,8 +445,9 @@ variorum/
   App JWT; least-privilege permission set; never logged.
 - **AuthN/Z:** users only see their own installations/repos; server-side checks
   on every resource.
-- **Least privilege GitHub App:** Contents (read/write for doc PRs), Pull requests
-  (read/write), Metadata (read), Webhooks. No admin scopes.
+- **Least privilege GitHub App:** Contents (read/write for doc/test PRs), Pull
+  requests (read/write), Issues (read, for history ingestion), Metadata (read),
+  Webhooks. No admin scopes.
 - **Human-in-the-loop:** generated changes land as PRs on non-protected branches;
   never auto-merge; never force-push.
 - **Data handling:** send only selected, relevant code context to AI providers;
@@ -489,7 +496,9 @@ variorum/
   high concurrency; documented as a deliberate trade-off.
 - Doc-drift detection is heuristic + LLM-assisted; it proposes, humans decide.
   False positives are expected and mitigated by the review gate.
-- No semantic search until Phase 2 (`pgvector`).
+- Semantic search shipped (Phase 2): hybrid keyword + embedding retrieval, with an
+  optional pgvector-accelerated path (auto-detected, `PGVECTOR_ENABLED`) that
+  falls back to in-process cosine.
 - Tree-sitter language coverage is limited to the grammars we bundle (start with
   Python, JS/TS; expand incrementally).
 - Requires at least one working AI provider key; with none configured, analysis
@@ -722,11 +731,13 @@ on.
 - **M7 — Semantic search:** embeddings via `gemini-embedding-001` (768-dim),
   stored as JSONB, blended with keyword search via in-process cosine similarity;
   graceful fallback to keyword-only when embeddings are unavailable.
-  - **pgvector note:** the target production store is a `pgvector` column with a
-    SQL `<=>` operator. pgvector is not installed on the current (native)
-    PostgreSQL, so embeddings are stored as JSONB and ranked in-process — fine at
-    this scale. Upgrade path: install pgvector, migrate the JSONB column to
-    `vector`, and swap the Python cosine for an indexed `<=>` query.
+  - **pgvector note (now implemented as an optional path):** embeddings are stored
+    as JSONB and ranked in-process by default. A guarded migration
+    (`c7d2f1a9b4e0`) adds a `vector` column + HNSW index + sync trigger **only
+    where the `vector` extension is available**, and retrieval auto-detects this
+    (`pgvector_active()`, `PGVECTOR_ENABLED`) to use an indexed `<=>` query,
+    falling back to in-process cosine otherwise. `alembic upgrade head` never
+    fails on a plain PostgreSQL.
   - Verified live: a paraphrased question with no keyword overlap retrieved the
     correct commit semantically, and the provider fallback recovered from a live
     Gemini 503 mid-answer.
@@ -768,6 +779,39 @@ A single **"Analyze PR"** (the `POST /repositories/{id}/analyze-pr` endpoint and
 the `pull_request` webhook) now fans out to **both** documentation-drift and
 test-risk analysis in one action; the dashboard shows both result cards from
 that one trigger. The granular `analyze-risk` endpoint remains for targeted runs.
+
+### Post-MVP milestones
+
+- **Frontend revamp:** landing page + full dashboard redesign (design-system
+  tokens, `DashboardProvider` context, routed sub-pages, animations, toasts,
+  skeletons, a11y, responsiveness).
+- **Finding triage:** dismiss/restore for drift **and** risk findings
+  (`RiskFinding.status` column + migration `ffac9be3ec48`; `POST
+  /findings/{id}/dismiss|restore`, `POST /risk-findings/{id}/dismiss|restore`),
+  with optimistic UI and a "show dismissed" filter.
+- **Theme toggle** (no-flash, persisted, light+dark), **command palette**
+  (Cmd/Ctrl-K navigation/search), and a **per-repository detail page**
+  (`/dashboard/repositories/[id]`) with a jobs activity timeline.
+- **Repository & team insights:** `GET /repositories/{id}/insights`
+  (doc-health score, severity/risk breakdowns, activity, top risk files,
+  knowledge coverage) and `GET /api/v1/teams` (per-installation rollups) with a
+  Teams dashboard page.
+- **Semantic search at scale:** optional pgvector path with auto-detection and
+  fallback (see M7 note).
+- **Repository Orientation:** `repository_guides` model + migration
+  (`d5b8e3c07f21`); a service that fuses the code index, docs, and history into a
+  cited onboarding guide via structured AI output; `GET`/`POST
+  /repositories/{id}/orientation`; an Orientation card on the repo detail page.
+- **Security & production hardening:** startup validation of production secrets
+  (fail-fast), security-headers middleware + HSTS, generic client errors with a
+  catch-all handler, in-process rate limiting, a defense-in-depth path-traversal
+  guard, configurable session-cookie SameSite, DB pool tuning, a backend
+  `Dockerfile`/entrypoint, and full docs (`SECURITY.md`, `CONTRIBUTING.md`,
+  `PRODUCTION_CHECKLIST.md`, `PRODUCTION_DEPLOYMENT_GUIDE.md`, MIT `LICENSE`).
+
+**Status:** 155 backend tests, mypy + ruff clean; frontend tsc + lint clean.
+The full endpoint surface is browsable at `/docs` (OpenAPI) — treat that as the
+authoritative API reference; §13 lists the original Phase-1 set.
 
 ---
 
