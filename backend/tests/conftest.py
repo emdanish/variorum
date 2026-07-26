@@ -59,6 +59,38 @@ def db_session(engine: Engine) -> Iterator[Session]:
 
 
 @pytest.fixture
+def sample_repo(tmp_path):
+    """A small working tree: Python + JS source, docs, and an ignored dir."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text(
+        "import os\n"
+        "from typing import Any\n\n"
+        "class Widget:\n"
+        "    def render(self, ctx: Any):\n"
+        "        return ctx\n\n"
+        "def helper():\n"
+        "    return 1\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src" / "util.js").write_text(
+        "import x from 'y';\n"
+        "export function doThing() { return 1; }\n"
+        "class Thing {}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "# Sample Project\n\n"
+        "The `Widget` class lives in `src/app.py`. See also doThing.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "node_modules").mkdir()
+    (tmp_path / "node_modules" / "ignored.py").write_text(
+        "def nope():\n    pass\n", encoding="utf-8"
+    )
+    return tmp_path
+
+
+@pytest.fixture
 def client(db_session: Session):
     from fastapi.testclient import TestClient
 

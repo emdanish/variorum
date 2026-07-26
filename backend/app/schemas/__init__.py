@@ -49,6 +49,25 @@ class RepositoryResponse(BaseModel):
     last_indexed_at: datetime | None = None
 
 
+class RepositoryDetail(RepositoryResponse):
+    symbol_count: int = 0
+    document_count: int = 0
+
+
+class JobResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    type: str
+    status: str
+    trigger: str
+    external_ref: str | None = None
+    error: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
 class ErrorDetail(BaseModel):
     code: str
     message: str

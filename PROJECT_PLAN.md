@@ -542,6 +542,28 @@ host port **5433** to avoid clashing with the native server.
       installation/repo persistence, webhook event routing, auth-scoped API —
       **48 tests**, mypy + ruff clean, frontend build passes.
 
-**Next up (M2 — Understand):** ingestion worker that clones/reads a connected
-repo via the installation token, builds a Tree-sitter structural index (files,
-functions, classes, imports), discovers documentation, and links docs ↔ code.
+### M2 — Understand (complete)
+- [x] Tree-sitter structural indexer for Python/JS/TS/TSX: extracts functions,
+      classes, methods, interfaces, and imports with line ranges + signatures;
+      skips vendored dirs and oversized files.
+- [x] Documentation discovery (Markdown/RST) with titles and content hashes.
+- [x] Heuristic doc↔code linking (file-path and symbol-name mentions) with
+      confidence + evidence, persisted as `doc_code_links`.
+- [x] Repository archive fetch via installation token (tarball download +
+      safe extraction).
+- [x] Idempotent persistence pipeline (`reindex_repository`) that replaces a
+      repo's symbols/docs/links atomically.
+- [x] Background indexing worker tracking `AnalysisJob` + `Repository.indexing_status`
+      (pending → indexing → indexed/failed); triggered from `POST
+      /repositories/{id}/connect` via `BackgroundTasks`.
+- [x] Repository detail (symbol/doc counts) and jobs-listing endpoints.
+- [x] Tests: code extraction, doc discovery, linker, pipeline persistence +
+      idempotency, job success/failure transitions — **62 tests**, mypy + ruff
+      clean. Real-world smoke test on Variorum's own repo: 78 files, 583 symbols,
+      38 doc↔code links.
+
+**Next up (M3 — Detect):** on a `pull_request` webhook, create a `pr_analysis`
+job that maps changed files → affected symbols → related documents (via
+`doc_code_links`), then asks the AI layer (with tight, relevant context) whether
+the docs have drifted, producing a structured `drift_findings` verdict with
+evidence. M4 then turns a finding into a doc-fix PR via the GitHub App.
