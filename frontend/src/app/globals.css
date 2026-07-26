@@ -2,46 +2,163 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------ *
+ * Variorum design tokens — dark-first, one restrained violet accent.
+ * ------------------------------------------------------------------ */
 :root {
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
   --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
+  --foreground: 240 10% 6%;
   --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --primary: 240 5.9% 10%;
-  --primary-foreground: 0 0% 98%;
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --ring: 240 5.9% 10%;
+  --card-foreground: 240 10% 6%;
+  --muted: 240 5% 96%;
+  --muted-foreground: 240 4% 44%;
+  --primary: 256 74% 56%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 240 5% 95.5%;
+  --accent-foreground: 240 6% 12%;
+  --border: 240 6% 90%;
+  --input: 240 6% 88%;
+  --ring: 256 74% 60%;
+
+  --success: 152 60% 42%;
+  --warning: 38 92% 50%;
+  --danger: 0 72% 55%;
 }
 
 .dark {
-  --background: 240 10% 3.9%;
+  --background: 240 10% 3.5%;
   --foreground: 0 0% 98%;
-  --card: 240 10% 5.5%;
+  --card: 240 9% 6%;
   --card-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --primary: 0 0% 98%;
-  --primary-foreground: 240 5.9% 10%;
-  --accent: 240 3.7% 15.9%;
+  --muted: 240 5% 13%;
+  --muted-foreground: 240 5% 62%;
+  --primary: 255 88% 72%;
+  --primary-foreground: 250 30% 8%;
+  --accent: 240 5% 13%;
   --accent-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 240 4.9% 83.9%;
+  --border: 240 5% 15%;
+  --input: 240 5% 17%;
+  --ring: 255 88% 72%;
+
+  --success: 152 58% 52%;
+  --warning: 38 95% 60%;
+  --danger: 0 75% 64%;
 }
 
 * {
   border-color: hsl(var(--border));
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle dot grid used on marketing surfaces. */
+.bg-grid {
+  background-image: radial-gradient(hsl(var(--border) / 0.7) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -1px -1px;
+}
+
+/* Soft radial glow (used sparingly behind the hero). */
+.glow-primary {
+  background: radial-gradient(
+    60% 50% at 50% 0%,
+    hsl(var(--primary) / 0.16) 0%,
+    transparent 70%
+  );
+}
+
+/* Skeleton shimmer. */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--foreground) / 0.06),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+/* Refined scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+/* Markdown (AI answers). */
+.prose-variorum {
+  font-size: 0.875rem;
+  line-height: 1.65;
+}
+.prose-variorum p {
+  margin: 0.5rem 0;
+}
+.prose-variorum ul,
+.prose-variorum ol {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+.prose-variorum ol {
+  list-style: decimal;
+}
+.prose-variorum code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.8em;
+  background: hsl(var(--muted));
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+}
+.prose-variorum pre {
+  background: hsl(var(--muted));
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+.prose-variorum pre code {
+  background: transparent;
+  padding: 0;
+}
+.prose-variorum a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-variorum strong {
+  color: hsl(var(--foreground));
+  font-weight: 600;
 }
