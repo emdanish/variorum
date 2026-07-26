@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   ArrowRight,
   BarChart3,
-  BookMarked,
   Boxes,
   Brain,
   Check,
@@ -297,23 +296,90 @@ function FinalCta() {
   );
 }
 
+const FOOTER_SECTIONS = [
+  {
+    title: "Product",
+    links: [
+      { label: "How it works", href: "/#how" },
+      { label: "Features", href: "/#features" },
+      { label: "Dashboard", href: "/dashboard" },
+    ],
+  },
+  {
+    title: "Get started",
+    links: [
+      { label: "Connect a repository", href: loginUrl, external: true },
+      { label: "Sign in", href: loginUrl, external: true },
+    ],
+  },
+  {
+    title: "Resources",
+    links: [
+      { label: "GitHub", href: "https://github.com/emdanish/variorum", external: true },
+      { label: "Report an issue", href: "https://github.com/emdanish/variorum/issues", external: true },
+    ],
+  },
+] as const;
+
 function Footer() {
+  const year = new Date().getFullYear();
   return (
-    <footer className="border-t border-border/60 py-10">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 sm:flex-row">
-        <div className="flex items-center gap-2">
-          <Logo />
-          <span className="ml-2 flex items-center gap-1 text-xs text-muted-foreground">
-            <BookMarked className="h-3 w-3" /> engineering knowledge infrastructure
-          </span>
+    <footer className="border-t border-border/60">
+      <div className="mx-auto max-w-6xl px-6 py-14">
+        <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+          <div className="max-w-xs">
+            <Logo />
+            <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+              The engineering memory layer for software teams. Keep documentation in sync, preserve
+              the &ldquo;why&rdquo; behind decisions, and catch risky changes.
+            </p>
+          </div>
+
+          {FOOTER_SECTIONS.map((section) => (
+            <div key={section.title}>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                {section.title}
+              </h3>
+              <ul className="mt-4 space-y-3 text-sm">
+                {section.links.map((link) => (
+                  <li key={link.label}>
+                    {"external" in link && link.external ? (
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        {link.label}
+                      </a>
+                    ) : (
+                      <Link
+                        href={link.href}
+                        className="text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        {link.label}
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
-        <div className="flex items-center gap-6 text-sm text-muted-foreground">
-          <a href="https://github.com/emdanish/variorum" className="hover:text-foreground">
-            GitHub
-          </a>
-          <Link href="/dashboard" className="hover:text-foreground">
-            Dashboard
-          </Link>
+
+        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-border/60 pt-8 text-sm text-muted-foreground sm:flex-row">
+          <p>&copy; {year} Variorum. All rights reserved.</p>
+          <p className="flex items-center gap-1.5">
+            Built with <span className="text-danger">&hearts;</span> by{" "}
+            <a
+              href="https://emdanish.dev"
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-foreground underline-offset-4 transition-colors hover:text-primary hover:underline"
+            >
+              Danish
+            </a>
+          </p>
         </div>
       </div>
     </footer>
