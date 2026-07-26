@@ -17,8 +17,16 @@ from app.models import (
     Repository,
     User,
 )
-from app.schemas import FindingResponse, JobResponse, RepositoryDetail, RepositoryResponse
+from app.schemas import (
+    AnalyzePrRequest,
+    AnalyzePrResponse,
+    FindingResponse,
+    JobResponse,
+    RepositoryDetail,
+    RepositoryResponse,
+)
 from app.workers.indexing import run_index_job
+from app.workers.pr_analysis import run_pr_analysis_job
 
 logger = get_logger("variorum.repositories")
 router = APIRouter(prefix="/repositories", tags=["repositories"])
@@ -133,6 +141,24 @@ def list_findings(
         .all()
     )
     return [finding_to_response(f) for f in rows]
+
+
+@router.post("/{repo_id}/analyze-pr", response_model=AnalyzePrResponse, status_code=202)
+def analyze_pr(
+    repo_id: int,
+    payload: AnalyzePrRequest,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AnalyzePrResponse:
+    """Manually run drift analysis for a pull request. Lets a demo trigger the
+    full pipeline without an inbound GitHub webhook (no public tunnel needed)."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    background_tasks.add_task(
+        run_pr_analysis_job, repo.id, payload.pr_number, head_sha=payload.head_sha
+    )
+    logger.info("manual PR analysis queued repo=%s pr=%s", repo.full_name, payload.pr_number)
+    return AnalyzePrResponse(status="queued", repository_id=repo.id, pr_number=payload.pr_number)
 
 
 @router.post("/{repo_id}/connect", response_model=RepositoryResponse)

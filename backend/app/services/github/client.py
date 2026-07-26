@@ -2,14 +2,21 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
+from urllib.parse import quote
 
 import httpx
 
 from app.services.github.auth import GitHubAppAuth
 
 GITHUB_API = "https://api.github.com"
+
+
 _ACCEPT = "application/vnd.github+json"
 _API_VERSION = "2022-11-28"
+
+
+def _encode_path(path: str) -> str:
+    return quote(path, safe="/")
 
 
 @dataclass
@@ -137,7 +144,7 @@ class GitHubClient:
         headers = await self._installation_headers(installation_id)
         async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
             resp = await client.get(
-                f"{GITHUB_API}/repos/{full_name}/contents/{path}",
+                f"{GITHUB_API}/repos/{full_name}/contents/{_encode_path(path)}",
                 headers=headers,
                 params={"ref": ref},
             )
@@ -157,7 +164,7 @@ class GitHubClient:
         headers = await self._installation_headers(installation_id)
         async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
             resp = await client.get(
-                f"{GITHUB_API}/repos/{full_name}/contents/{path}",
+                f"{GITHUB_API}/repos/{full_name}/contents/{_encode_path(path)}",
                 headers=headers,
                 params={"ref": ref},
             )
@@ -184,6 +191,8 @@ class GitHubClient:
     async def create_branch(
         self, installation_id: int, full_name: str, branch: str, base_sha: str
     ) -> None:
+        """Create a branch. Idempotent: an already-existing ref (422) is not an
+        error, so a retried doc-fix reuses the branch instead of failing."""
         headers = await self._installation_headers(installation_id)
         async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
             resp = await client.post(
@@ -191,6 +200,8 @@ class GitHubClient:
                 headers=headers,
                 json={"ref": f"refs/heads/{branch}", "sha": base_sha},
             )
+        if resp.status_code == 422 and "already exists" in resp.text.lower():
+            return
         resp.raise_for_status()
 
     async def put_file(
@@ -213,7 +224,9 @@ class GitHubClient:
             body["sha"] = sha
         async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
             resp = await client.put(
-                f"{GITHUB_API}/repos/{full_name}/contents/{path}", headers=headers, json=body
+                f"{GITHUB_API}/repos/{full_name}/contents/{_encode_path(path)}",
+                headers=headers,
+                json=body,
             )
         resp.raise_for_status()
 

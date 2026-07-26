@@ -604,11 +604,34 @@ host port **5433** to avoid clashing with the native server.
       ops via mocked transport — **84 tests**, mypy + ruff clean, frontend build
       passes.
 
+### Hardening — demo readiness (complete)
+- [x] Verified all four AI providers live with real keys; corrected model
+      defaults to working IDs (`gemini-flash-latest`, `deepseek-v4-flash`,
+      `sonar`) — see the discovery that `gemini-2.5-flash`/`deepseek-chat` were
+      dead.
+- [x] Failure isolation: one bad AI response or unfetchable doc no longer fails
+      a whole PR-analysis job (per-candidate try/except); the open-PR endpoint
+      maps AI/GitHub errors to clean 502/503/409s.
+- [x] GitHub client hardening: URL-encoded content paths; `create_branch`
+      tolerates an already-existing ref (idempotent retries).
+- [x] **Manual PR analysis** (`POST /repositories/{id}/analyze-pr`) so a demo
+      runs entirely on localhost without a webhook tunnel.
+- [x] `GET /system/status` readiness (database, AI, GitHub App) surfaced as
+      dashboard cards; dashboard auto-refreshes while indexing.
+- [x] Diagnostics: `scripts/check_env.py` (config checklist) and
+      `scripts/check_ai.py` (live provider ping); cross-platform start scripts
+      (`scripts/start-*.ps1|.sh`).
+- [x] `SETUP.md`: click-by-click GitHub App creation, every `.env` value
+      explained, and a demo script.
+- [x] Full suite green: **88 tests**, mypy + ruff clean, frontend build passes;
+      backend + frontend verified serving locally.
+
 ## MVP complete 🎉
 
 The Phase 1 loop is closed end-to-end: **connect → understand → detect drift
 (with evidence) → propose a doc-fix pull request**. Variorum proposes; humans
-review and merge — it never auto-merges or force-pushes.
+review and merge — it never auto-merges or force-pushes. See
+[`SETUP.md`](./SETUP.md) to configure and demo it.
 
 To run it live, register a GitHub App (README → *GitHub App setup*), fill the
 credentials + at least one AI key into `.env`, connect a repository, and open a

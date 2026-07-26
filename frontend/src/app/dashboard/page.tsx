@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
   Github,
   Loader2,
   Plug,
   RefreshCw,
+  Search,
   XCircle,
 } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
@@ -17,9 +18,9 @@ import {
   ApiError,
   loginUrl,
   type Finding,
-  type Health,
   type Installation,
   type Repository,
+  type SystemStatus,
   type User,
 } from "@/lib/api";
 
@@ -27,30 +28,46 @@ type LoadState = "loading" | "signed-out" | "ready" | "error";
 
 export default function DashboardPage() {
   const [state, setState] = useState<LoadState>("loading");
+  const [status, setStatus] = useState<SystemStatus | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [health, setHealth] = useState<Health | null>(null);
   const [installations, setInstallations] = useState<Installation[]>([]);
   const [repos, setRepos] = useState<Repository[]>([]);
-  const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [findings, setFindings] = useState<Finding[]>([]);
+  const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [prByFinding, setPrByFinding] = useState<Record<number, { url: string | null }>>({});
   const [pendingPr, setPendingPr] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const refreshing = useRef(false);
+
+  const fetchData = useCallback(async () => {
+    const [inst, r, iu] = await Promise.allSettled([
+      api.installations(),
+      api.repositories(),
+      api.installUrl(),
+    ]);
+    if (inst.status === "fulfilled") setInstallations(inst.value);
+    if (iu.status === "fulfilled") setInstallUrl(iu.value.install_url);
+    if (r.status === "fulfilled") {
+      setRepos(r.value);
+      const lists = await Promise.all(
+        r.value.map((repo) => api.findings(repo.id).catch(() => [] as Finding[])),
+      );
+      setFindings(lists.flat());
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const h = await api.health();
-      setHealth(h);
+      setStatus(await api.systemStatus());
     } catch (e) {
       setError((e as Error).message);
       setState("error");
       return;
     }
     try {
-      const me = await api.me();
-      setUser(me);
+      setUser(await api.me());
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setState("signed-out");
@@ -60,25 +77,22 @@ export default function DashboardPage() {
       setState("error");
       return;
     }
-    const [inst, r, iu] = await Promise.allSettled([
-      api.installations(),
-      api.repositories(),
-      api.installUrl(),
-    ]);
-    if (inst.status === "fulfilled") setInstallations(inst.value);
-    if (r.status === "fulfilled") setRepos(r.value);
-    if (iu.status === "fulfilled") setInstallUrl(iu.value.install_url);
-
-    if (r.status === "fulfilled" && r.value.length > 0) {
-      const lists = await Promise.all(
-        r.value.map((repo) => api.findings(repo.id).catch(() => [] as Finding[])),
-      );
-      setFindings(lists.flat());
-    } else {
-      setFindings([]);
-    }
+    await fetchData();
     setState("ready");
-  }, []);
+  }, [fetchData]);
+
+  const silentRefresh = useCallback(async () => {
+    if (refreshing.current) return;
+    refreshing.current = true;
+    try {
+      setStatus(await api.systemStatus());
+      await fetchData();
+    } catch {
+      /* ignore transient refresh errors */
+    } finally {
+      refreshing.current = false;
+    }
+  }, [fetchData]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -86,6 +100,16 @@ export default function DashboardPage() {
     if (params.get("error")) setBanner("Connection failed. Check your GitHub App configuration.");
     void load();
   }, [load]);
+
+  // Poll while indexing is in flight so status/findings update without a manual refresh.
+  const inFlight = repos.some(
+    (r) => r.indexing_status === "pending" || r.indexing_status === "indexing",
+  );
+  useEffect(() => {
+    if (state !== "ready" || !inFlight) return;
+    const id = setInterval(() => void silentRefresh(), 5000);
+    return () => clearInterval(id);
+  }, [state, inFlight, silentRefresh]);
 
   const onConnect = async (repo: Repository) => {
     try {
@@ -96,10 +120,15 @@ export default function DashboardPage() {
     }
   };
 
-  const onLogout = async () => {
-    await api.logout();
-    setUser(null);
-    setState("signed-out");
+  const onAnalyze = async (repo: Repository, prNumber: number) => {
+    try {
+      await api.analyzePr(repo.id, prNumber);
+      setBanner(`Analysis queued for ${repo.full_name} PR #${prNumber}. Findings will appear shortly.`);
+      window.setTimeout(() => void silentRefresh(), 4000);
+      window.setTimeout(() => void silentRefresh(), 10000);
+    } catch (e) {
+      setBanner((e as Error).message);
+    }
   };
 
   const onOpenPr = async (finding: Finding) => {
@@ -115,6 +144,12 @@ export default function DashboardPage() {
     } finally {
       setPendingPr(null);
     }
+  };
+
+  const onLogout = async () => {
+    await api.logout();
+    setUser(null);
+    setState("signed-out");
   };
 
   return (
@@ -138,6 +173,10 @@ export default function DashboardPage() {
                   </Button>
                 </a>
               )}
+              <Button variant="ghost" size="sm" onClick={() => void silentRefresh()}>
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </Button>
               <Button variant="ghost" size="sm" onClick={onLogout}>
                 Sign out
               </Button>
@@ -146,8 +185,11 @@ export default function DashboardPage() {
         </div>
 
         {banner && (
-          <div className="rounded-md border border-border bg-accent/50 px-4 py-2 text-sm">
-            {banner}
+          <div className="flex items-center justify-between rounded-md border border-border bg-accent/50 px-4 py-2 text-sm">
+            <span>{banner}</span>
+            <button className="text-muted-foreground hover:text-foreground" onClick={() => setBanner(null)}>
+              ✕
+            </button>
           </div>
         )}
 
@@ -181,54 +223,60 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <a href={loginUrl}>
-                <Button>
-                  <Github className="h-4 w-4" />
-                  Sign in with GitHub
-                </Button>
-              </a>
+              {status?.github_app.oauth ? (
+                <a href={loginUrl}>
+                  <Button>
+                    <Github className="h-4 w-4" />
+                    Sign in with GitHub
+                  </Button>
+                </a>
+              ) : (
+                <p className="text-sm text-amber-500">
+                  GitHub App is not configured yet. Complete <code>SETUP.md</code> and restart the
+                  backend, then reload this page.
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
 
-        {state === "ready" && user && (
+        {state === "ready" && user && status && (
           <>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <StatusCard
-                title="Backend"
-                ok={health?.status === "ok"}
-                detail={health ? `${health.app} · ${health.environment}` : "unknown"}
-              />
+            <div className="grid gap-4 sm:grid-cols-3">
+              <StatusCard title="Backend" ok={status.database === "ok"} detail={`database: ${status.database}`} />
               <StatusCard
                 title="AI providers"
-                ok={Boolean(health?.ai_available)}
+                ok={status.ai_available}
                 detail={
-                  health?.ai_available
-                    ? health.ai_providers.join(" → ")
+                  status.ai_available
+                    ? status.ai_providers.join(" → ")
                     : "No provider keys configured"
+                }
+              />
+              <StatusCard
+                title="GitHub App"
+                ok={status.github_app.configured}
+                detail={
+                  status.github_app.configured
+                    ? "configured"
+                    : "incomplete — see SETUP.md"
                 }
               />
             </div>
 
             <Card>
-              <CardHeader className="flex-row items-center justify-between space-y-0">
-                <div className="space-y-1.5">
-                  <CardTitle className="text-lg">Repositories</CardTitle>
-                  <CardDescription>
-                    {installations.length} installation
-                    {installations.length === 1 ? "" : "s"} · watched for documentation drift.
-                  </CardDescription>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => void load()}>
-                  <RefreshCw className="h-4 w-4" />
-                  Refresh
-                </Button>
+              <CardHeader>
+                <CardTitle className="text-lg">Repositories</CardTitle>
+                <CardDescription>
+                  {installations.length} installation{installations.length === 1 ? "" : "s"} ·
+                  index a repository, then analyze a pull request.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {repos.length > 0 ? (
                   <ul className="divide-y divide-border">
                     {repos.map((repo) => (
-                      <li key={repo.id} className="flex items-center justify-between py-3">
+                      <li key={repo.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-sm">{repo.full_name}</span>
                           {repo.private && (
@@ -236,9 +284,9 @@ export default function DashboardPage() {
                               private
                             </span>
                           )}
-                        </div>
-                        <div className="flex items-center gap-3">
                           <StatusBadge status={repo.indexing_status} />
+                        </div>
+                        <div className="flex items-center gap-2">
                           <Button
                             variant="outline"
                             size="sm"
@@ -247,6 +295,10 @@ export default function DashboardPage() {
                           >
                             {repo.indexing_status === "indexed" ? "Re-index" : "Index"}
                           </Button>
+                          <AnalyzeForm
+                            disabled={repo.indexing_status !== "indexed"}
+                            onAnalyze={(n) => void onAnalyze(repo, n)}
+                          />
                         </div>
                       </li>
                     ))}
@@ -261,7 +313,7 @@ export default function DashboardPage() {
               <CardHeader>
                 <CardTitle className="text-lg">Documentation drift</CardTitle>
                 <CardDescription>
-                  Findings from pull requests where docs may have fallen out of sync with code.
+                  Findings from analyzed pull requests where docs may have fallen out of sync.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -273,9 +325,7 @@ export default function DashboardPage() {
                           <div className="flex items-center gap-2">
                             <SeverityBadge severity={f.severity} />
                             {f.pr_number && (
-                              <span className="text-xs text-muted-foreground">
-                                PR #{f.pr_number}
-                              </span>
+                              <span className="text-xs text-muted-foreground">PR #{f.pr_number}</span>
                             )}
                             {f.document_path && (
                               <span className="font-mono text-xs text-muted-foreground">
@@ -296,7 +346,7 @@ export default function DashboardPage() {
                   </ul>
                 ) : (
                   <p className="py-6 text-center text-sm text-muted-foreground">
-                    No drift detected yet. Findings appear here after a pull request is analyzed.
+                    No drift detected yet. Index a repository, then analyze a pull request.
                   </p>
                 )}
               </CardContent>
@@ -305,6 +355,71 @@ export default function DashboardPage() {
         )}
       </main>
     </div>
+  );
+}
+
+function AnalyzeForm({
+  disabled,
+  onAnalyze,
+}: {
+  disabled: boolean;
+  onAnalyze: (prNumber: number) => void;
+}) {
+  const [value, setValue] = useState("");
+  const submit = () => {
+    const n = parseInt(value, 10);
+    if (!Number.isNaN(n) && n > 0) {
+      onAnalyze(n);
+      setValue("");
+    }
+  };
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        type="number"
+        min={1}
+        placeholder="PR #"
+        value={value}
+        disabled={disabled}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+        className="h-8 w-20 rounded-md border border-border bg-transparent px-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+      />
+      <Button variant="outline" size="sm" disabled={disabled || !value} onClick={submit}>
+        <Search className="h-3.5 w-3.5" />
+        Analyze
+      </Button>
+    </div>
+  );
+}
+
+function FindingAction({
+  finding,
+  pending,
+  pr,
+  onOpenPr,
+}: {
+  finding: Finding;
+  pending: boolean;
+  pr?: { url: string | null };
+  onOpenPr: () => void;
+}) {
+  if (pr?.url) {
+    return (
+      <a href={pr.url} target="_blank" rel="noreferrer">
+        <Button variant="outline" size="sm">
+          View PR
+        </Button>
+      </a>
+    );
+  }
+  if (finding.status === "pr_opened") {
+    return <span className="text-xs text-muted-foreground">PR opened</span>;
+  }
+  return (
+    <Button variant="outline" size="sm" disabled={pending} onClick={onOpenPr}>
+      {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Open doc-fix PR"}
+    </Button>
   );
 }
 
@@ -335,43 +450,7 @@ function StatusBadge({ status }: { status: string }) {
         : status === "failed"
           ? "text-red-500 border-red-500/40"
           : "text-muted-foreground border-border";
-  return (
-    <span className={`rounded-full border px-2 py-0.5 text-xs ${tone}`}>{status}</span>
-  );
-}
-
-function FindingAction({
-  finding,
-  pending,
-  pr,
-  onOpenPr,
-}: {
-  finding: Finding;
-  pending: boolean;
-  pr?: { url: string | null };
-  onOpenPr: () => void;
-}) {
-  if (pr?.url) {
-    return (
-      <a href={pr.url} target="_blank" rel="noreferrer">
-        <Button variant="outline" size="sm">
-          View PR
-        </Button>
-      </a>
-    );
-  }
-  if (finding.status === "pr_opened") {
-    return <span className="text-xs text-muted-foreground">PR opened</span>;
-  }
-  return (
-    <Button variant="outline" size="sm" disabled={pending} onClick={onOpenPr}>
-      {pending ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : (
-        "Open doc-fix PR"
-      )}
-    </Button>
-  );
+  return <span className={`rounded-full border px-2 py-0.5 text-xs ${tone}`}>{status}</span>;
 }
 
 function SeverityBadge({ severity }: { severity: string }) {

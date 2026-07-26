@@ -91,7 +91,7 @@ def _run(
         if installation is None:
             raise RuntimeError("installation missing for repository")
 
-        assessed = asyncio.run(
+        assessed, errors = asyncio.run(
             _analyze(
                 db=db,
                 repo=repo,
@@ -104,6 +104,8 @@ def _run(
                 max_docs=max_docs,
             )
         )
+        if errors and not assessed:
+            raise RuntimeError(f"all {errors} document assessment(s) failed")
 
         findings = 0
         for candidate, verdict in assessed:
@@ -160,7 +162,7 @@ async def _analyze(
     doc_fetcher: DocFetcher | None,
     ai: AIService,
     max_docs: int,
-) -> list[tuple[DriftCandidate, DriftVerdict]]:
+) -> tuple[list[tuple[DriftCandidate, DriftVerdict]], int]:
     client: GitHubClient | None = None
     if pr_files is None:
         client = GitHubClient(GitHubAppAuth(get_settings()))
@@ -182,27 +184,37 @@ async def _analyze(
         candidates = candidates[:max_docs]
 
     results: list[tuple[DriftCandidate, DriftVerdict]] = []
+    errors = 0
     for candidate in candidates:
-        if doc_fetcher is not None:
-            content = doc_fetcher(candidate.document_path)
-        else:
-            if client is None:
-                client = GitHubClient(GitHubAppAuth(get_settings()))
-            content = await client.get_file_text(
-                installation_id, repo.full_name, candidate.document_path, head_sha
+        try:
+            if doc_fetcher is not None:
+                content = doc_fetcher(candidate.document_path)
+            else:
+                if client is None:
+                    client = GitHubClient(GitHubAppAuth(get_settings()))
+                content = await client.get_file_text(
+                    installation_id, repo.full_name, candidate.document_path, head_sha
+                )
+            if not content:
+                continue
+            diffs = [
+                ChangedFileDiff(path=path, patch=patch_by_path.get(path))
+                for path in candidate.trigger_paths
+            ]
+            verdict = await assess_document_drift(
+                ai,
+                doc_path=candidate.document_path,
+                doc_content=content,
+                affected_symbols=candidate.symbol_names,
+                diffs=diffs,
             )
-        if not content:
-            continue
-        diffs = [
-            ChangedFileDiff(path=path, patch=patch_by_path.get(path))
-            for path in candidate.trigger_paths
-        ]
-        verdict = await assess_document_drift(
-            ai,
-            doc_path=candidate.document_path,
-            doc_content=content,
-            affected_symbols=candidate.symbol_names,
-            diffs=diffs,
-        )
-        results.append((candidate, verdict))
-    return results
+            results.append((candidate, verdict))
+        except Exception as exc:  # noqa: BLE001 — isolate per-document failures
+            errors += 1
+            logger.warning(
+                "drift assessment failed doc=%s pr=%s: %s",
+                candidate.document_path,
+                pr_number,
+                exc,
+            )
+    return results, errors

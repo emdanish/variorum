@@ -48,6 +48,21 @@ export interface Finding {
   created_at: string;
 }
 
+export interface GitHubAppStatus {
+  app_id: boolean;
+  private_key: boolean;
+  webhook_secret: boolean;
+  oauth: boolean;
+  configured: boolean;
+}
+
+export interface SystemStatus {
+  database: string;
+  ai_available: boolean;
+  ai_providers: string[];
+  github_app: GitHubAppStatus;
+}
+
 export interface GeneratedPR {
   id: number;
   finding_id: number;
@@ -85,6 +100,7 @@ export const loginUrl = `${BACKEND_URL}/api/v1/auth/github/login`;
 
 export const api = {
   health: () => request<Health>("/health"),
+  systemStatus: () => request<SystemStatus>("/api/v1/system/status"),
   me: () => request<User>("/api/v1/auth/me"),
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
   installations: () => request<Installation[]>("/api/v1/github/installations"),
@@ -96,4 +112,9 @@ export const api = {
     request<Finding[]>(`/api/v1/repositories/${repoId}/findings`),
   openDocFixPr: (findingId: number) =>
     request<GeneratedPR>(`/api/v1/findings/${findingId}/open-pr`, { method: "POST" }),
+  analyzePr: (repoId: number, prNumber: number) =>
+    request<{ status: string; pr_number: number }>(
+      `/api/v1/repositories/${repoId}/analyze-pr`,
+      { method: "POST", body: JSON.stringify({ pr_number: prNumber }) },
+    ),
 };

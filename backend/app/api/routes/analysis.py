@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -125,6 +126,13 @@ async def open_doc_fix_pr(
     except AllProvidersFailedError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI generation failed: {exc}"
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        detail = f"GitHub API error ({exc.response.status_code}). Check the App's permissions."
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"GitHub request failed: {exc}"
         ) from exc
 
     if result is None:

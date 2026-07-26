@@ -13,6 +13,9 @@ The first product surface (MVP, Phase 1) is **Documentation Intelligence**: when
 pull request changes code, Variorum detects when documentation has drifted out of
 sync and proposes a doc-fix pull request — with evidence for every claim.
 
+> **Setting it up for a demo? Follow [`SETUP.md`](./SETUP.md)** — a click-by-click
+> guide to the GitHub App, every `.env` value, and the demo script.
+
 See [`PROJECT_PLAN.md`](./PROJECT_PLAN.md) for the full PRD, architecture, and
 roadmap.
 

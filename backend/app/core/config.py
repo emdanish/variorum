@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     perplexity_api_key: str = ""
 
-    gemini_model: str = "gemini-2.5-flash"
-    deepseek_model: str = "deepseek-chat"
+    gemini_model: str = "gemini-flash-latest"
+    deepseek_model: str = "deepseek-v4-flash"
     perplexity_model: str = "sonar"
 
     github_app_id: str = ""

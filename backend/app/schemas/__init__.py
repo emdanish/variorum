@@ -95,6 +95,32 @@ class GeneratedPRResponse(BaseModel):
     reused: bool = False
 
 
+class AnalyzePrRequest(BaseModel):
+    pr_number: int
+    head_sha: str | None = None
+
+
+class AnalyzePrResponse(BaseModel):
+    status: str
+    repository_id: int
+    pr_number: int
+
+
+class GitHubAppStatus(BaseModel):
+    app_id: bool = False
+    private_key: bool = False
+    webhook_secret: bool = False
+    oauth: bool = False
+    configured: bool = False
+
+
+class SystemStatus(BaseModel):
+    database: str
+    ai_available: bool
+    ai_providers: list[str]
+    github_app: GitHubAppStatus
+
+
 class ErrorDetail(BaseModel):
     code: str
     message: str
