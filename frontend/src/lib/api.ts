@@ -35,6 +35,19 @@ export interface Repository {
   last_indexed_at: string | null;
 }
 
+export interface Finding {
+  id: number;
+  analysis_job_id: number;
+  document_id: number | null;
+  document_path: string | null;
+  severity: string;
+  summary: string;
+  status: string;
+  pr_number: number | null;
+  evidence: Record<string, unknown>;
+  created_at: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -69,4 +82,6 @@ export const api = {
   repositories: () => request<Repository[]>("/api/v1/repositories"),
   connectRepository: (id: number) =>
     request<Repository>(`/api/v1/repositories/${id}/connect`, { method: "POST" }),
+  findings: (repoId: number) =>
+    request<Finding[]>(`/api/v1/repositories/${repoId}/findings`),
 };

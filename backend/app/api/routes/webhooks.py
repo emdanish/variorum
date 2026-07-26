@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_settings
 from app.core.logging import get_logger
-from app.services.github.events import dispatch_webhook
+from app.services.github.events import dispatch_webhook, resolve_pr_analysis
 from app.services.github.webhook import verify_webhook_signature
+from app.workers.pr_analysis import run_pr_analysis_job
 
 logger = get_logger("variorum.webhooks")
 router = APIRouter(tags=["webhooks"])
@@ -17,6 +18,7 @@ router = APIRouter(tags=["webhooks"])
 @router.post("/webhooks/github", status_code=202)
 async def github_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     x_hub_signature_256: str | None = Header(default=None),
     x_github_event: str | None = Header(default=None),
@@ -34,7 +36,22 @@ async def github_webhook(
         raise HTTPException(status_code=400, detail="Malformed JSON payload") from exc
 
     event = x_github_event or "unknown"
-    result = dispatch_webhook(db, event, payload)
+
+    if event == "pull_request":
+        request_ = resolve_pr_analysis(db, payload)
+        if request_ is None:
+            result = "pr_analysis:skipped"
+        else:
+            background_tasks.add_task(
+                run_pr_analysis_job,
+                request_.repository_id,
+                request_.pr_number,
+                head_sha=request_.head_sha,
+            )
+            result = f"pr_analysis:queued:{request_.pr_number}"
+    else:
+        result = dispatch_webhook(db, event, payload)
+
     logger.info(
         "webhook handled event=%s delivery=%s result=%s", event, x_github_delivery, result
     )

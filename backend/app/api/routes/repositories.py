@@ -5,17 +5,19 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.api.routes.analysis import finding_to_response
 from app.core.logging import get_logger
 from app.models import (
     AnalysisJob,
     CodeSymbol,
     Document,
+    DriftFinding,
     GitHubInstallation,
     IndexingStatus,
     Repository,
     User,
 )
-from app.schemas import JobResponse, RepositoryDetail, RepositoryResponse
+from app.schemas import FindingResponse, JobResponse, RepositoryDetail, RepositoryResponse
 from app.workers.indexing import run_index_job
 
 logger = get_logger("variorum.repositories")
@@ -111,6 +113,26 @@ def list_jobs(
         )
         for j in jobs
     ]
+
+
+@router.get("/{repo_id}/findings", response_model=list[FindingResponse])
+def list_findings(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[FindingResponse]:
+    repo = _get_owned_repo(db, user.id, repo_id)
+    rows = (
+        db.execute(
+            select(DriftFinding)
+            .join(AnalysisJob, DriftFinding.analysis_job_id == AnalysisJob.id)
+            .where(AnalysisJob.repository_id == repo.id)
+            .order_by(DriftFinding.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    return [finding_to_response(f) for f in rows]
 
 
 @router.post("/{repo_id}/connect", response_model=RepositoryResponse)

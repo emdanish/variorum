@@ -16,6 +16,7 @@ import {
   api,
   ApiError,
   loginUrl,
+  type Finding,
   type Health,
   type Installation,
   type Repository,
@@ -31,6 +32,7 @@ export default function DashboardPage() {
   const [installations, setInstallations] = useState<Installation[]>([]);
   const [repos, setRepos] = useState<Repository[]>([]);
   const [installUrl, setInstallUrl] = useState<string | null>(null);
+  const [findings, setFindings] = useState<Finding[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
 
@@ -64,6 +66,15 @@ export default function DashboardPage() {
     if (inst.status === "fulfilled") setInstallations(inst.value);
     if (r.status === "fulfilled") setRepos(r.value);
     if (iu.status === "fulfilled") setInstallUrl(iu.value.install_url);
+
+    if (r.status === "fulfilled" && r.value.length > 0) {
+      const lists = await Promise.all(
+        r.value.map((repo) => api.findings(repo.id).catch(() => [] as Finding[])),
+      );
+      setFindings(lists.flat());
+    } else {
+      setFindings([]);
+    }
     setState("ready");
   }, []);
 
@@ -228,6 +239,43 @@ export default function DashboardPage() {
                 )}
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Documentation drift</CardTitle>
+                <CardDescription>
+                  Findings from pull requests where docs may have fallen out of sync with code.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {findings.length > 0 ? (
+                  <ul className="space-y-3">
+                    {findings.map((f) => (
+                      <li key={f.id} className="rounded-md border border-border p-3">
+                        <div className="flex items-center gap-2">
+                          <SeverityBadge severity={f.severity} />
+                          {f.pr_number && (
+                            <span className="text-xs text-muted-foreground">
+                              PR #{f.pr_number}
+                            </span>
+                          )}
+                          {f.document_path && (
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {f.document_path}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1.5 text-sm">{f.summary}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    No drift detected yet. Findings appear here after a pull request is analyzed.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
           </>
         )}
       </main>
@@ -264,6 +312,22 @@ function StatusBadge({ status }: { status: string }) {
           : "text-muted-foreground border-border";
   return (
     <span className={`rounded-full border px-2 py-0.5 text-xs ${tone}`}>{status}</span>
+  );
+}
+
+function SeverityBadge({ severity }: { severity: string }) {
+  const tone =
+    severity === "high"
+      ? "text-red-500 border-red-500/40"
+      : severity === "medium"
+        ? "text-amber-500 border-amber-500/40"
+        : severity === "low"
+          ? "text-yellow-500 border-yellow-500/40"
+          : "text-muted-foreground border-border";
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-xs font-medium uppercase ${tone}`}>
+      {severity}
+    </span>
   );
 }
 

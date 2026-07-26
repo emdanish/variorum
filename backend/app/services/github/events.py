@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
-from app.models import GitHubInstallation
+from app.models import GitHubInstallation, Repository
 from app.services.github.client import RepoInfo
 from app.services.installations import (
     remove_repositories,
@@ -13,6 +15,34 @@ from app.services.installations import (
 )
 
 logger = get_logger("variorum.gh_events")
+
+PR_ANALYZE_ACTIONS = frozenset({"opened", "synchronize", "reopened"})
+
+
+@dataclass
+class PRAnalysisRequest:
+    repository_id: int
+    pr_number: int
+    head_sha: str | None
+
+
+def resolve_pr_analysis(db: Session, payload: dict) -> PRAnalysisRequest | None:
+    """Extract a PR-analysis request from a `pull_request` webhook payload, or
+    None if the action is not analyzable or the repo is not connected."""
+    if payload.get("action") not in PR_ANALYZE_ACTIONS:
+        return None
+    pull_request = payload.get("pull_request") or {}
+    number = pull_request.get("number")
+    github_repo_id = (payload.get("repository") or {}).get("id")
+    if number is None or github_repo_id is None:
+        return None
+    repo = db.execute(
+        select(Repository).where(Repository.github_repo_id == github_repo_id)
+    ).scalar_one_or_none()
+    if repo is None:
+        return None
+    head_sha = (pull_request.get("head") or {}).get("sha")
+    return PRAnalysisRequest(repository_id=repo.id, pr_number=number, head_sha=head_sha)
 
 
 def _repo_from_payload(raw: dict) -> RepoInfo:

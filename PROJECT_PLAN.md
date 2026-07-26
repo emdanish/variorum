@@ -562,8 +562,33 @@ host port **5433** to avoid clashing with the native server.
       clean. Real-world smoke test on Variorum's own repo: 78 files, 583 symbols,
       38 doc↔code links.
 
-**Next up (M3 — Detect):** on a `pull_request` webhook, create a `pr_analysis`
-job that maps changed files → affected symbols → related documents (via
-`doc_code_links`), then asks the AI layer (with tight, relevant context) whether
-the docs have drifted, producing a structured `drift_findings` verdict with
-evidence. M4 then turns a finding into a doc-fix PR via the GitHub App.
+### M3 — Detect (complete)
+- [x] AIService.complete_structured returning parsed JSON **plus** provider/model
+      provenance, so every verdict records which provider answered.
+- [x] Drift assessor: prompt builder (doc content + relevant diffs + affected
+      symbols, budget-truncated) and `assess_document_drift` → structured
+      `DriftVerdict` (drifted?, severity, summary, evidence, suggested update).
+- [x] PR context mapper: changed file paths → affected symbols → related
+      documents via `doc_code_links` (path and symbol links).
+- [x] GitHub client: `list_pull_request_files` (paginated) and `get_file_text`
+      (contents at a ref).
+- [x] PR analysis worker: fetch PR files → build candidates → fetch doc content
+      at head → assess drift via the AI layer → persist `drift_findings` with
+      evidence (PR#, trigger files, symbols, provider/model, suggested update);
+      manages the `pr_analysis` AnalysisJob. Candidate count is capped and logged.
+- [x] Webhook enqueues analysis on `pull_request` opened/synchronize/reopened
+      for connected repos; unknown repos/actions are skipped.
+- [x] API: job detail with findings, finding detail, per-repo findings list.
+- [x] Frontend: "Documentation drift" panel on the dashboard (severity, summary,
+      PR#, doc path).
+- [x] Tests: context mapper, drift prompt + assessor (fake AI), PR worker
+      (drift / no-drift / missing-content / no-provider), webhook enqueue —
+      **77 tests**, mypy + ruff clean, frontend build passes.
+
+**MVP status:** the Phase 1 loop is closed end-to-end except automated doc-fix
+PRs — connect → understand → **detect drift with evidence**.
+
+**Next up (M4 — Propose):** turn a `drift_finding` (with its AI-suggested update)
+into a real pull request via the GitHub App — create a branch, commit the doc
+change, open a PR referencing the triggering PR, and record it in `generated_prs`.
+Human review + merge stays the gate; Variorum never auto-merges.

@@ -68,6 +68,23 @@ class JobResponse(BaseModel):
     finished_at: datetime | None = None
 
 
+class FindingResponse(BaseModel):
+    id: int
+    analysis_job_id: int
+    document_id: int | None = None
+    document_path: str | None = None
+    severity: str
+    summary: str
+    status: str
+    pr_number: int | None = None
+    evidence: dict
+    created_at: datetime
+
+
+class JobDetail(JobResponse):
+    findings: list[FindingResponse] = []
+
+
 class ErrorDetail(BaseModel):
     code: str
     message: str

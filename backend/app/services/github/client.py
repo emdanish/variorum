@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 
 import httpx
@@ -25,6 +26,15 @@ class RepoInfo:
     full_name: str
     default_branch: str
     private: bool
+
+
+@dataclass
+class ChangedFile:
+    path: str
+    status: str
+    patch: str | None
+    additions: int
+    deletions: int
 
 
 class GitHubClient:
@@ -86,6 +96,53 @@ class GitHubClient:
                 page += 1
         return repos
 
+    async def _installation_headers(self, installation_id: int) -> dict[str, str]:
+        token = (await self._auth.get_installation_token(installation_id)).token
+        return {
+            "Authorization": f"Bearer {token}",
+            "Accept": _ACCEPT,
+            "X-GitHub-Api-Version": _API_VERSION,
+        }
+
+    async def list_pull_request_files(
+        self, installation_id: int, full_name: str, number: int
+    ) -> list[ChangedFile]:
+        headers = await self._installation_headers(installation_id)
+        files: list[ChangedFile] = []
+        page = 1
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            while True:
+                resp = await client.get(
+                    f"{GITHUB_API}/repos/{full_name}/pulls/{number}/files",
+                    headers=headers,
+                    params={"per_page": 100, "page": page},
+                )
+                resp.raise_for_status()
+                batch = resp.json()
+                files.extend(_parse_changed_file(f) for f in batch)
+                if len(batch) < 100:
+                    break
+                page += 1
+        return files
+
+    async def get_file_text(
+        self, installation_id: int, full_name: str, path: str, ref: str
+    ) -> str | None:
+        headers = await self._installation_headers(installation_id)
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            resp = await client.get(
+                f"{GITHUB_API}/repos/{full_name}/contents/{path}",
+                headers=headers,
+                params={"ref": ref},
+            )
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("encoding") == "base64" and "content" in data:
+            return base64.b64decode(data["content"]).decode("utf-8", "replace")
+        return None
+
 
 def _parse_repo(r: dict) -> RepoInfo:
     return RepoInfo(
@@ -93,4 +150,14 @@ def _parse_repo(r: dict) -> RepoInfo:
         full_name=r["full_name"],
         default_branch=r.get("default_branch") or "main",
         private=bool(r.get("private", True)),
+    )
+
+
+def _parse_changed_file(f: dict) -> ChangedFile:
+    return ChangedFile(
+        path=f["filename"],
+        status=f.get("status", "modified"),
+        patch=f.get("patch"),
+        additions=f.get("additions", 0),
+        deletions=f.get("deletions", 0),
     )

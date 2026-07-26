@@ -47,7 +47,7 @@ class AIService:
             purpose=purpose,
         )
 
-    async def complete_json(
+    async def complete_structured(
         self,
         prompt: str,
         *,
@@ -55,7 +55,9 @@ class AIService:
         temperature: float = 0.0,
         max_tokens: int | None = None,
         purpose: str = "generic_json",
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], CompletionResult]:
+        """Return both the parsed JSON object and the provider/model metadata, so
+        callers can record which provider produced an answer (evidence)."""
         messages: list[Message] = []
         if system:
             messages.append(Message(role="system", content=system))
@@ -67,7 +69,25 @@ class AIService:
             json_mode=True,
             purpose=purpose,
         )
-        return json.loads(strip_json_fence(result.text))
+        return json.loads(strip_json_fence(result.text)), result
+
+    async def complete_json(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        purpose: str = "generic_json",
+    ) -> dict[str, Any]:
+        data, _ = await self.complete_structured(
+            prompt,
+            system=system,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            purpose=purpose,
+        )
+        return data
 
 
 def build_provider_manager(settings: Settings) -> ProviderManager:
