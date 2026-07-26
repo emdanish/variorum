@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai.embeddings import EmbeddingService
 from app.models import KnowledgeEntry, KnowledgeKind
 from app.services.github.client import HistoryItem
 
@@ -55,3 +56,30 @@ def store_items(db: Session, repository_id: int, items: list[HistoryItem]) -> in
         if item.source_ref:
             upsert_entry(db, repository_id, item)
     return len([i for i in items if i.source_ref])
+
+
+def embed_missing(db: Session, repository_id: int, embedder: EmbeddingService) -> int:
+    """Compute and store embeddings for entries that don't have one yet. Returns
+    the number embedded (0 if embeddings are unavailable)."""
+    if not embedder.available:
+        return 0
+    rows = (
+        db.execute(
+            select(KnowledgeEntry).where(
+                KnowledgeEntry.repository_id == repository_id,
+                KnowledgeEntry.embedding.is_(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return 0
+    texts = [f"{e.title or ''}\n\n{e.body or ''}".strip() for e in rows]
+    vectors = embedder.embed_batch(texts)
+    if not vectors or len(vectors) != len(rows):
+        return 0
+    for entry, vector in zip(rows, vectors, strict=False):
+        entry.embedding = vector
+    db.commit()
+    return len(rows)

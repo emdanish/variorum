@@ -1,11 +1,30 @@
 from __future__ import annotations
 
 from app.models import GitHubInstallation, KnowledgeEntry, KnowledgeKind, Repository, User
+from app.services.knowledge import embed_missing
 from app.services.qa import answer_question, retrieve
 from tests._fakes import FakeAI
 from tests.conftest import requires_db
 
 pytestmark = requires_db
+
+
+class FakeEmbedder:
+    """Returns a fixed query vector, and per-text vectors for batches."""
+
+    def __init__(self, query_vec, batch_vecs=None):
+        self._query_vec = query_vec
+        self._batch_vecs = batch_vecs
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    def embed(self, _text):
+        return self._query_vec
+
+    def embed_batch(self, texts):
+        return self._batch_vecs or [[1.0, 0.0] for _ in texts]
 
 
 def _seed(db, *, owner_id: int | None = None) -> Repository:
@@ -52,6 +71,45 @@ def test_retrieve_finds_relevant(db_session):
 def test_retrieve_empty_on_no_match(db_session):
     repo = _seed(db_session)
     assert retrieve(db_session, repo.id, "kubernetes helm sharding") == []
+
+
+def test_hybrid_retrieval_finds_semantically_close_without_keywords(db_session):
+    repo = _seed(db_session)
+    # Two embedded entries; the question shares NO keywords with either.
+    e1 = KnowledgeEntry(
+        repository_id=repo.id, kind=KnowledgeKind.commit, source_ref="c1",
+        title="gamma", body="gamma", embedding=[1.0, 0.0, 0.0],
+    )
+    e2 = KnowledgeEntry(
+        repository_id=repo.id, kind=KnowledgeKind.commit, source_ref="c2",
+        title="omega", body="omega", embedding=[0.0, 1.0, 0.0],
+    )
+    db_session.add_all([e1, e2])
+    db_session.flush()
+
+    # Query embedding is close to e1's vector; keyword search matches neither.
+    embedder = FakeEmbedder(query_vec=[0.9, 0.1, 0.0])
+    hits = retrieve(db_session, repo.id, "zzz-nonmatching-term", embedder=embedder)
+    assert hits and hits[0].source_ref == "c1"
+
+
+def test_retrieve_falls_back_to_keyword_when_no_embedder(db_session):
+    repo = _seed(db_session)
+    # No embedder -> keyword FTS path (the Redis PR should surface).
+    hits = retrieve(db_session, repo.id, "redis")
+    assert hits and hits[0].source_ref == "182"
+
+
+def test_embed_missing_stores_vectors(db_session):
+    repo = _seed(db_session)  # seeds 2 entries without embeddings
+    embedder = FakeEmbedder(query_vec=[0.0], batch_vecs=[[1.0, 0.0], [0.0, 1.0]])
+    n = embed_missing(db_session, repo.id, embedder)
+    assert n == 2
+    vecs = [
+        e.embedding
+        for e in db_session.query(KnowledgeEntry).filter_by(repository_id=repo.id).all()
+    ]
+    assert all(v is not None for v in vecs)
 
 
 async def test_answer_question_grounds_citations(db_session):

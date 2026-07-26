@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -31,3 +32,6 @@ class KnowledgeEntry(Base, TimestampMixin):
     url: Mapped[str | None] = mapped_column(String(1024))
     author: Mapped[str | None] = mapped_column(String(255))
     occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Semantic-search embedding stored as a JSON array of floats. (pgvector is
+    # the production upgrade; JSONB + in-process cosine avoids that dependency.)
+    embedding: Mapped[list[float] | None] = mapped_column(JSONB)

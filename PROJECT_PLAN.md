@@ -712,3 +712,24 @@ never an unsupported claim.
 
 **Starting point:** M5 (history ingestion) — the data foundation the Q&A builds
 on.
+
+### Phase 2 delivered ✅
+- **M5 — History ingestion:** `knowledge_entries` + GitHub commit/PR/issue
+  client methods + idempotent ingestion worker + API. Verified live.
+- **M6 — Cited Q&A:** full-text retrieval (tsvector + GIN) + `POST
+  /repositories/{id}/ask` answering only from context with grounded citations;
+  "Engineering memory" dashboard card. Verified live.
+- **M7 — Semantic search:** embeddings via `gemini-embedding-001` (768-dim),
+  stored as JSONB, blended with keyword search via in-process cosine similarity;
+  graceful fallback to keyword-only when embeddings are unavailable.
+  - **pgvector note:** the target production store is a `pgvector` column with a
+    SQL `<=>` operator. pgvector is not installed on the current (native)
+    PostgreSQL, so embeddings are stored as JSONB and ranked in-process — fine at
+    this scale. Upgrade path: install pgvector, migrate the JSONB column to
+    `vector`, and swap the Python cosine for an indexed `<=>` query.
+  - Verified live: a paraphrased question with no keyword overlap retrieved the
+    correct commit semantically, and the provider fallback recovered from a live
+    Gemini 503 mid-answer.
+
+**Status:** 113 tests, mypy + ruff clean. Phase 2 (Engineering Memory) is
+functionally complete; Phase 3 (Testing Intelligence) is the next major phase.

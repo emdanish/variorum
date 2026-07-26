@@ -4,13 +4,14 @@ import asyncio
 
 from sqlalchemy.orm import Session
 
+from app.ai.embeddings import get_embedding_service
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.models import GitHubInstallation, Repository
 from app.services.github.auth import GitHubAppAuth
 from app.services.github.client import GitHubClient, HistoryItem
-from app.services.knowledge import store_items
+from app.services.knowledge import embed_missing, store_items
 
 logger = get_logger("variorum.ingest")
 
@@ -59,7 +60,14 @@ def _run(
 
         stored = store_items(db, repo.id, items)
         db.commit()
-        logger.info("ingested history repo=%s entries=%d", repo.full_name, stored)
+        try:
+            embedded = embed_missing(db, repo.id, get_embedding_service())
+        except Exception as exc:  # noqa: BLE001 — embeddings are best-effort
+            embedded = 0
+            logger.warning("embedding step failed repo=%s: %s", repo.full_name, exc)
+        logger.info(
+            "ingested history repo=%s entries=%d embedded=%d", repo.full_name, stored, embedded
+        )
         return stored
     except Exception as exc:  # noqa: BLE001 — never crash the worker
         db.rollback()

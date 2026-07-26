@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai.base import AllProvidersFailedError
+from app.ai.embeddings import get_embedding_service
 from app.api.deps import get_ai_service, get_current_user, get_db
 from app.api.routes.analysis import finding_to_response
 from app.core.logging import get_logger
@@ -225,7 +226,7 @@ async def ask(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No AI provider configured"
         )
 
-    entries = retrieve(db, repo.id, question)
+    entries = retrieve(db, repo.id, question, embedder=get_embedding_service())
     try:
         result = await answer_question(ai, question, entries)
     except AllProvidersFailedError as exc:

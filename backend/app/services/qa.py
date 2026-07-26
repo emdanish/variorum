@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.ai.embeddings import EmbeddingService
 from app.ai.service import AIService
 from app.models import KnowledgeEntry
 
 MAX_ENTRIES = 8
 MAX_BODY_CHARS = 600
+MIN_SIMILARITY = 0.4  # cosine floor to exclude clearly-unrelated vector hits
 
 SYSTEM_PROMPT = (
     "You are Variorum's engineering-memory assistant. Answer the question using "
@@ -37,12 +40,73 @@ def _haystack():
     return func.coalesce(KnowledgeEntry.title, "") + " " + func.coalesce(KnowledgeEntry.body, "")
 
 
-def retrieve(
-    db: Session, repository_id: int, question: str, *, k: int = MAX_ENTRIES
+def _cosine(a: list[float], b: list[float]) -> float:
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0 or nb == 0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def _merge(
+    primary: list[KnowledgeEntry], secondary: list[KnowledgeEntry], k: int
 ) -> list[KnowledgeEntry]:
-    """Full-text retrieval over a repository's knowledge entries, ranked by
-    relevance then recency. Falls back to a keyword ILIKE match when full-text
-    search yields nothing (e.g. rare identifiers that don't stem)."""
+    seen: set[int] = set()
+    out: list[KnowledgeEntry] = []
+    for entry in [*primary, *secondary]:
+        if entry.id in seen:
+            continue
+        seen.add(entry.id)
+        out.append(entry)
+        if len(out) >= k:
+            break
+    return out
+
+
+def retrieve(
+    db: Session,
+    repository_id: int,
+    question: str,
+    *,
+    k: int = MAX_ENTRIES,
+    embedder: EmbeddingService | None = None,
+) -> list[KnowledgeEntry]:
+    """Hybrid retrieval: semantic (embedding cosine) blended with keyword
+    full-text search. Falls back to keyword-only when embeddings are
+    unavailable (no embedder, no quota, or nothing embedded)."""
+    keyword_hits = _keyword_retrieve(db, repository_id, question, k)
+    if embedder is None or not embedder.available:
+        return keyword_hits
+
+    query_vec = embedder.embed(question)
+    if not query_vec:
+        return keyword_hits
+
+    embedded = (
+        db.execute(
+            select(KnowledgeEntry).where(
+                KnowledgeEntry.repository_id == repository_id,
+                KnowledgeEntry.embedding.is_not(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    scored = [(_cosine(query_vec, e.embedding or []), e) for e in embedded]
+    ranked = sorted(scored, key=lambda s: s[0], reverse=True)
+    vector_hits = [e for score, e in ranked if score >= MIN_SIMILARITY][:k]
+
+    return _merge(vector_hits, keyword_hits, k)
+
+
+def _keyword_retrieve(
+    db: Session, repository_id: int, question: str, k: int
+) -> list[KnowledgeEntry]:
+    """Full-text retrieval ranked by relevance then recency, with a keyword
+    ILIKE fallback for rare identifiers that don't stem."""
     tsv = func.to_tsvector("english", _haystack())
     tsq = func.websearch_to_tsquery("english", question)
     rows = (
