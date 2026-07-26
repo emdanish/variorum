@@ -163,6 +163,22 @@ class GitHubClient:
                 page += 1
         return files
 
+    async def get_commit_files(
+        self, installation_id: int, full_name: str, sha: str
+    ) -> list[ChangedFile]:
+        """Files touched by a single commit (with per-file additions/deletions).
+        Powers the churn/hotspot dataset. Returns [] on 404 (e.g. a rebased sha)."""
+        headers = await self._installation_headers(installation_id)
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            resp = await client.get(
+                f"{GITHUB_API}/repos/{full_name}/commits/{sha}", headers=headers
+            )
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        files = resp.json().get("files") or []
+        return [_parse_changed_file(f) for f in files]
+
     async def get_file_text(
         self, installation_id: int, full_name: str, path: str, ref: str
     ) -> str | None:

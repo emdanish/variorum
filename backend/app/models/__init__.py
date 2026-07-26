@@ -19,6 +19,7 @@ from app.models.enums import (
 )
 from app.models.github import GitHubInstallation, Repository
 from app.models.knowledge import KnowledgeEntry
+from app.models.metrics import FileChange
 from app.models.orientation import RepositoryGuide
 from app.models.user import User
 
@@ -30,6 +31,7 @@ __all__ = [
     "DocumentKind",
     "DriftFinding",
     "DriftSeverity",
+    "FileChange",
     "FindingStatus",
     "GeneratedPR",
     "GitHubInstallation",

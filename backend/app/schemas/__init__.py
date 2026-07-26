@@ -169,6 +169,55 @@ class RepositoryGuideResponse(BaseModel):
     generated_at: datetime
 
 
+class Hotspot(BaseModel):
+    path: str
+    score: int
+    level: str
+    changes: int
+    churn: int
+    authors: int
+    fixes: int
+    has_tests: bool
+
+
+class ModuleOwnership(BaseModel):
+    module: str
+    author_count: int
+    primary_owner: str
+    primary_share: float
+    bus_factor: int
+    single_owner: bool
+
+
+class OwnershipReport(BaseModel):
+    modules: list[ModuleOwnership]
+    module_count: int
+    single_owner_modules: int
+
+
+class DocCoverageModule(BaseModel):
+    module: str
+    documented: int
+    total: int
+    pct: float
+
+
+class DocCoverageReport(BaseModel):
+    overall_pct: float
+    documented: int
+    total: int
+    modules: list[DocCoverageModule]
+
+
+class HealthScore(BaseModel):
+    score: int
+    level: str
+    subscores: dict[str, int]
+    single_owner_modules: int
+    module_count: int
+    doc_coverage_pct: float
+
+
 class TeamInsights(BaseModel):
     id: int
     installation_id: int

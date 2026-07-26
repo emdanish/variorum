@@ -32,12 +32,16 @@ from app.schemas import (
     AskRequest,
     AskResponse,
     Citation,
+    DocCoverageReport,
     FindingResponse,
     GuideArea,
     GuideDecision,
+    HealthScore,
+    Hotspot,
     IngestResponse,
     JobResponse,
     KnowledgeStats,
+    OwnershipReport,
     RepositoryDetail,
     RepositoryGuideResponse,
     RepositoryInsights,
@@ -46,6 +50,7 @@ from app.schemas import (
     RiskPath,
 )
 from app.services import insights as insights_svc
+from app.services import metrics as metrics_svc
 from app.services import orientation as orientation_svc
 from app.services.qa import answer_question, retrieve
 from app.workers.indexing import run_index_job
@@ -333,6 +338,51 @@ def repository_insights(
         activity=activity,
         top_risk_paths=top_risk_paths,
     )
+
+
+@router.get("/{repo_id}/hotspots", response_model=list[Hotspot])
+def repository_hotspots(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[Hotspot]:
+    """Behavioral code hotspots: files ranked by churn, change frequency, fix
+    history, and missing test coverage. Empty until history is ingested."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    return [Hotspot(**h) for h in metrics_svc.compute_hotspots(db, repo.id)]
+
+
+@router.get("/{repo_id}/ownership", response_model=OwnershipReport)
+def repository_ownership(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> OwnershipReport:
+    """Per-module ownership and bus-factor (knowledge-concentration) risk."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    return OwnershipReport(**metrics_svc.compute_ownership(db, repo.id))
+
+
+@router.get("/{repo_id}/doc-coverage", response_model=DocCoverageReport)
+def repository_doc_coverage(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DocCoverageReport:
+    """Share of source files that have documentation linked, by module."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    return DocCoverageReport(**metrics_svc.compute_doc_coverage(db, repo.id))
+
+
+@router.get("/{repo_id}/health", response_model=HealthScore)
+def repository_health(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HealthScore:
+    """Composite knowledge-health score (documentation, coverage, risk, ownership)."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    return HealthScore(**metrics_svc.compute_health(db, repo.id))
 
 
 @router.post("/{repo_id}/ingest-history", response_model=IngestResponse, status_code=202)
