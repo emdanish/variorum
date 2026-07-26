@@ -76,7 +76,7 @@ def upgrade() -> None:
     op.create_table('analysis_jobs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('repository_id', sa.Integer(), nullable=False),
-    sa.Column('type', sa.Enum('index', 'pr_analysis', name='jobtype'), nullable=False),
+    sa.Column('type', sa.Enum('indexing', 'pr_analysis', name='jobtype'), nullable=False),
     sa.Column('status', sa.Enum('queued', 'running', 'succeeded', 'failed', name='jobstatus'), nullable=False),
     sa.Column('trigger', sa.Enum('webhook', 'manual', name='jobtrigger'), nullable=False),
     sa.Column('external_ref', sa.String(length=255), nullable=True),

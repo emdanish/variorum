@@ -91,20 +91,25 @@ pull requests with least-privilege, per-installation tokens.
 1. Go to **https://github.com/settings/apps** and click **New GitHub App**.
 2. **GitHub App name:** e.g. `variorum-dev`.
 3. **Homepage URL:** `http://localhost:3000`.
-4. **Webhook URL:** your public backend URL + `/webhooks/github`. For local
+4. **Callback URL** (user sign-in / OAuth): your public backend URL +
+   `/api/v1/auth/github/callback`.
+5. **Setup URL** (where GitHub sends users after install): your public backend
+   URL + `/api/v1/github/setup`, and tick **Redirect on update**.
+6. **Webhook URL:** your public backend URL + `/webhooks/github`. For local
    development, tunnel it with [smee.io](https://smee.io) or `cloudflared` and
    paste the tunnel URL.
-5. **Webhook secret:** generate a long random string; put the same value in
+7. **Webhook secret:** generate a long random string; put the same value in
    `.env` as `GITHUB_WEBHOOK_SECRET`.
-6. **Repository permissions:** Contents = *Read & write*, Pull requests =
+8. **Repository permissions:** Contents = *Read & write*, Pull requests =
    *Read & write*, Metadata = *Read-only*.
-7. **Subscribe to events:** *Pull request* and *Push*.
-8. Click **Create GitHub App**.
-9. On the App page, copy the **App ID** → `.env` `GITHUB_APP_ID`. Copy the
-   **Client ID** → `GITHUB_APP_CLIENT_ID`, generate a **client secret** →
-   `GITHUB_APP_CLIENT_SECRET`, and note the **slug** (from the App URL) →
-   `GITHUB_APP_SLUG`.
-10. Under **Private keys**, click **Generate a private key**. A `.pem` file
+9. **Subscribe to events:** *Pull request*, *Push*, *Installation*, and
+   *Installation repositories*.
+10. Click **Create GitHub App**.
+11. On the App page, copy the **App ID** → `.env` `GITHUB_APP_ID`. Copy the
+    **Client ID** → `GITHUB_APP_CLIENT_ID`, generate a **client secret** →
+    `GITHUB_APP_CLIENT_SECRET`, and note the **slug** (from the App URL) →
+    `GITHUB_APP_SLUG`.
+12. Under **Private keys**, click **Generate a private key**. A `.pem` file
     downloads. Save it to `backend/secrets/github-app.pem` (git-ignored) and set
     `GITHUB_APP_PRIVATE_KEY_PATH` accordingly — or base64-encode it into
     `GITHUB_APP_PRIVATE_KEY_BASE64`.

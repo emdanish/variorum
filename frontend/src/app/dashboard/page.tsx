@@ -1,42 +1,93 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CheckCircle2, Github, Loader2, Plug, XCircle } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  CheckCircle2,
+  Github,
+  Loader2,
+  Plug,
+  RefreshCw,
+  XCircle,
+} from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { api, type Health, type Repository } from "@/lib/api";
+import {
+  api,
+  ApiError,
+  loginUrl,
+  type Health,
+  type Installation,
+  type Repository,
+  type User,
+} from "@/lib/api";
+
+type LoadState = "loading" | "signed-out" | "ready" | "error";
 
 export default function DashboardPage() {
+  const [state, setState] = useState<LoadState>("loading");
+  const [user, setUser] = useState<User | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
-  const [repos, setRepos] = useState<Repository[] | null>(null);
+  const [installations, setInstallations] = useState<Installation[]>([]);
+  const [repos, setRepos] = useState<Repository[]>([]);
   const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [banner, setBanner] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setState("loading");
+    try {
+      const h = await api.health();
+      setHealth(h);
+    } catch (e) {
+      setError((e as Error).message);
+      setState("error");
+      return;
+    }
+    try {
+      const me = await api.me();
+      setUser(me);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        setState("signed-out");
+        return;
+      }
+      setError((e as Error).message);
+      setState("error");
+      return;
+    }
+    const [inst, r, iu] = await Promise.allSettled([
+      api.installations(),
+      api.repositories(),
+      api.installUrl(),
+    ]);
+    if (inst.status === "fulfilled") setInstallations(inst.value);
+    if (r.status === "fulfilled") setRepos(r.value);
+    if (iu.status === "fulfilled") setInstallUrl(iu.value.install_url);
+    setState("ready");
+  }, []);
 
   useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const [h, r, i] = await Promise.all([
-          api.health(),
-          api.repositories(),
-          api.installUrl(),
-        ]);
-        if (!active) return;
-        setHealth(h);
-        setRepos(r);
-        setInstallUrl(i.install_url);
-      } catch (e) {
-        if (active) setError((e as Error).message);
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("connected")) setBanner(`Connected ${params.get("connected")}.`);
+    if (params.get("error")) setBanner("Connection failed. Check your GitHub App configuration.");
+    void load();
+  }, [load]);
+
+  const onConnect = async (repo: Repository) => {
+    try {
+      const updated = await api.connectRepository(repo.id);
+      setRepos((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+    } catch (e) {
+      setBanner((e as Error).message);
+    }
+  };
+
+  const onLogout = async () => {
+    await api.logout();
+    setUser(null);
+    setState("signed-out");
+  };
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -49,23 +100,36 @@ export default function DashboardPage() {
               Connected repositories and system status.
             </p>
           </div>
-          {installUrl && (
-            <a href={installUrl}>
-              <Button>
-                <Github className="h-4 w-4" />
-                Connect repository
+          {state === "ready" && user && (
+            <div className="flex items-center gap-3">
+              {installUrl && (
+                <a href={installUrl}>
+                  <Button>
+                    <Github className="h-4 w-4" />
+                    Connect repository
+                  </Button>
+                </a>
+              )}
+              <Button variant="ghost" size="sm" onClick={onLogout}>
+                Sign out
               </Button>
-            </a>
+            </div>
           )}
         </div>
 
-        {loading && (
+        {banner && (
+          <div className="rounded-md border border-border bg-accent/50 px-4 py-2 text-sm">
+            {banner}
+          </div>
+        )}
+
+        {state === "loading" && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading…
           </div>
         )}
 
-        {error && !loading && (
+        {state === "error" && (
           <Card className="border-red-500/40">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -80,7 +144,26 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {!loading && !error && (
+        {state === "signed-out" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Sign in to continue</CardTitle>
+              <CardDescription>
+                Connect your GitHub account to install Variorum on your repositories.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <a href={loginUrl}>
+                <Button>
+                  <Github className="h-4 w-4" />
+                  Sign in with GitHub
+                </Button>
+              </a>
+            </CardContent>
+          </Card>
+        )}
+
+        {state === "ready" && user && (
           <>
             <div className="grid gap-4 sm:grid-cols-2">
               <StatusCard
@@ -100,40 +183,48 @@ export default function DashboardPage() {
             </div>
 
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Repositories</CardTitle>
-                <CardDescription>
-                  Repositories Variorum is watching for documentation drift.
-                </CardDescription>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <div className="space-y-1.5">
+                  <CardTitle className="text-lg">Repositories</CardTitle>
+                  <CardDescription>
+                    {installations.length} installation
+                    {installations.length === 1 ? "" : "s"} · watched for documentation drift.
+                  </CardDescription>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => void load()}>
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh
+                </Button>
               </CardHeader>
               <CardContent>
-                {repos && repos.length > 0 ? (
+                {repos.length > 0 ? (
                   <ul className="divide-y divide-border">
                     {repos.map((repo) => (
                       <li key={repo.id} className="flex items-center justify-between py-3">
-                        <span className="font-mono text-sm">{repo.full_name}</span>
-                        <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-                          {repo.indexing_status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm">{repo.full_name}</span>
+                          {repo.private && (
+                            <span className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+                              private
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <StatusBadge status={repo.indexing_status} />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={repo.indexing_status === "indexing"}
+                            onClick={() => void onConnect(repo)}
+                          >
+                            {repo.indexing_status === "indexed" ? "Re-index" : "Index"}
+                          </Button>
+                        </div>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <div className="flex flex-col items-center gap-3 py-10 text-center">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent">
-                      <Plug className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      No repositories connected yet. Install the GitHub App to get started.
-                    </p>
-                    {installUrl && (
-                      <a href={installUrl}>
-                        <Button variant="outline" size="sm">
-                          Connect a repository
-                        </Button>
-                      </a>
-                    )}
-                  </div>
+                  <EmptyRepos installUrl={installUrl} />
                 )}
               </CardContent>
             </Card>
@@ -159,5 +250,39 @@ function StatusCard({ title, ok, detail }: { title: string; ok: boolean; detail:
         <CardDescription className="font-mono text-xs">{detail}</CardDescription>
       </CardHeader>
     </Card>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const tone =
+    status === "indexed"
+      ? "text-emerald-500 border-emerald-500/40"
+      : status === "indexing"
+        ? "text-blue-500 border-blue-500/40"
+        : status === "failed"
+          ? "text-red-500 border-red-500/40"
+          : "text-muted-foreground border-border";
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-xs ${tone}`}>{status}</span>
+  );
+}
+
+function EmptyRepos({ installUrl }: { installUrl: string | null }) {
+  return (
+    <div className="flex flex-col items-center gap-3 py-10 text-center">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent">
+        <Plug className="h-5 w-5 text-muted-foreground" />
+      </div>
+      <p className="text-sm text-muted-foreground">
+        No repositories connected yet. Install the GitHub App to get started.
+      </p>
+      {installUrl && (
+        <a href={installUrl}>
+          <Button variant="outline" size="sm">
+            Connect a repository
+          </Button>
+        </a>
+      )}
+    </div>
   );
 }

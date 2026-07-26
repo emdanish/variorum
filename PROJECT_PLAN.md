@@ -518,10 +518,30 @@ Kept current as work lands. Newest first.
       live PostgreSQL, frontend `next build` succeeds.
 - [x] Commit + push foundation.
 
-**Local dev note:** the Docker PostgreSQL is published on host port **5433**
-(not 5432) to coexist with a native PostgreSQL install. `DATABASE_URL` in
-`.env`/`.env.example` reflects this.
+**Local dev note:** the primary local DB is a **native PostgreSQL on 5432**
+(role `variorum`). The bundled Docker PostgreSQL is an alternative published on
+host port **5433** to avoid clashing with the native server.
 
-**Next up (M1 — Connect):** GitHub App installation callback, repository
-listing/selection, persistence of installations + repositories, dashboard wired
-to real data.
+### M1 — Connect (complete)
+- [x] GitHub OAuth (user-to-server) login: authorize → callback → user upsert →
+      session cookie; `/auth/me`, `/auth/logout`.
+- [x] Session-based `get_current_user` / `get_optional_user` dependencies.
+- [x] Installation-scoped GitHub REST client (App JWT + installation token),
+      with injectable transport for testing.
+- [x] Installation + repository persistence (upsert / prune / remove) and
+      API-driven sync.
+- [x] App setup-URL callback: links installation to the logged-in user and syncs
+      repositories.
+- [x] Webhook handlers for `installation` and `installation_repositories`
+      (idempotent), plus acknowledgement of `pull_request`/`push` (M3).
+- [x] User-scoped repositories API + `POST /repositories/{id}/connect` to queue
+      indexing.
+- [x] Frontend: Sign in with GitHub, auth-aware dashboard, connect flow, per-repo
+      index action, post-install banner.
+- [x] Tests: OAuth URL building, GitHub client (mocked transport + pagination),
+      installation/repo persistence, webhook event routing, auth-scoped API —
+      **48 tests**, mypy + ruff clean, frontend build passes.
+
+**Next up (M2 — Understand):** ingestion worker that clones/reads a connected
+repo via the installation token, builds a Tree-sitter structural index (files,
+functions, classes, imports), discovers documentation, and links docs ↔ code.

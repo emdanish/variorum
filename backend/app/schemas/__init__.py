@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict
 
 
 class HealthResponse(BaseModel):
@@ -13,6 +15,38 @@ class HealthResponse(BaseModel):
 
 class InstallUrlResponse(BaseModel):
     install_url: str
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: str
+    name: str | None = None
+    avatar_url: str | None = None
+    github_user_id: int | None = None
+
+
+class InstallationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    installation_id: int
+    account_login: str
+    account_type: str
+    suspended: bool = False
+
+
+class RepositoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    installation_id: int
+    full_name: str
+    default_branch: str
+    private: bool
+    indexing_status: str
+    last_indexed_at: datetime | None = None
 
 
 class ErrorDetail(BaseModel):
