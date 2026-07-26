@@ -169,6 +169,47 @@ class RepositoryGuideResponse(BaseModel):
     generated_at: datetime
 
 
+class DecisionSource(BaseModel):
+    ref: str
+    kind: str
+    url: str | None = None
+
+
+class DecisionResponse(BaseModel):
+    id: int
+    title: str
+    summary: str
+    sources: list[DecisionSource] = []
+    decided_at: datetime | None = None
+    generated_at: datetime
+
+
+class PrBriefingFile(BaseModel):
+    path: str
+    hotspot_score: int | None = None
+    hotspot_level: str | None = None
+    has_tests: bool | None = None
+    module: str
+    primary_owner: str | None = None
+    bus_factor: int | None = None
+    single_owner: bool = False
+    risk_findings: int = 0
+
+
+class PrBriefingSummary(BaseModel):
+    files_analyzed: int
+    high_risk_files: int
+    single_owner_files: int
+    untested_files: int
+    top_file: str | None = None
+
+
+class PrBriefing(BaseModel):
+    pr_number: int
+    files: list[PrBriefingFile]
+    summary: PrBriefingSummary
+
+
 class Hotspot(BaseModel):
     path: str
     score: int

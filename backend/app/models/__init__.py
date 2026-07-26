@@ -6,6 +6,7 @@ from app.models.analysis import (
     RiskFinding,
 )
 from app.models.code import CodeSymbol, DocCodeLink, Document
+from app.models.decision import DecisionEntry
 from app.models.enums import (
     DocumentKind,
     DriftSeverity,
@@ -26,6 +27,7 @@ from app.models.user import User
 __all__ = [
     "AnalysisJob",
     "CodeSymbol",
+    "DecisionEntry",
     "DocCodeLink",
     "Document",
     "DocumentKind",

@@ -141,7 +141,9 @@ def _test_stems(db: Session, repository_id: int) -> set[str]:
     return {_stem(p) for p in paths if is_test_path(p)}
 
 
-def compute_hotspots(db: Session, repository_id: int, *, limit: int = 20) -> list[dict]:
+def hotspot_map(db: Session, repository_id: int) -> dict[str, dict]:
+    """Compute the hotspot record for every source file (keyed by path).
+    Shared by the hotspots list and the PR-impact briefing."""
     rows = db.execute(
         select(
             FileChange.path,
@@ -156,9 +158,7 @@ def compute_hotspots(db: Session, repository_id: int, *, limit: int = 20) -> lis
     for path, author, adds, dels, is_fix in rows:
         if not is_source_path(path):
             continue
-        a = agg.setdefault(
-            path, {"changes": 0, "churn": 0, "authors": set(), "fixes": 0}
-        )
+        a = agg.setdefault(path, {"changes": 0, "churn": 0, "authors": set(), "fixes": 0})
         a["changes"] += 1
         a["churn"] += (adds or 0) + (dels or 0)
         if author:
@@ -166,13 +166,13 @@ def compute_hotspots(db: Session, repository_id: int, *, limit: int = 20) -> lis
         if is_fix:
             a["fixes"] += 1
     if not agg:
-        return []
+        return {}
 
     max_churn = max(a["churn"] for a in agg.values()) or 1
     max_changes = max(a["changes"] for a in agg.values()) or 1
     test_stems = _test_stems(db, repository_id)
 
-    hotspots: list[dict] = []
+    result: dict[str, dict] = {}
     for path, a in agg.items():
         stem = _stem(path)
         # A source file is "covered" if its name appears inside a test file's
@@ -186,18 +186,21 @@ def compute_hotspots(db: Session, repository_id: int, *, limit: int = 20) -> lis
             + _W_NOCOVER * (0.0 if has_tests else 1.0)
         )
         score = round(raw * 100)
-        hotspots.append(
-            {
-                "path": path,
-                "score": score,
-                "level": _level(score),
-                "changes": a["changes"],
-                "churn": a["churn"],
-                "authors": len(a["authors"]),
-                "fixes": a["fixes"],
-                "has_tests": has_tests,
-            }
-        )
+        result[path] = {
+            "path": path,
+            "score": score,
+            "level": _level(score),
+            "changes": a["changes"],
+            "churn": a["churn"],
+            "authors": len(a["authors"]),
+            "fixes": a["fixes"],
+            "has_tests": has_tests,
+        }
+    return result
+
+
+def compute_hotspots(db: Session, repository_id: int, *, limit: int = 20) -> list[dict]:
+    hotspots = list(hotspot_map(db, repository_id).values())
     hotspots.sort(key=lambda h: (cast(int, h["score"]), cast(int, h["churn"])), reverse=True)
     return hotspots[:limit]
 

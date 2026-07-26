@@ -2,18 +2,20 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai.base import AllProvidersFailedError
 from app.ai.embeddings import get_embedding_service
-from app.api.deps import get_ai_service, get_current_user, get_db
+from app.api.deps import get_ai_service, get_current_user, get_db, get_github_auth
 from app.api.routes.analysis import finding_to_response
 from app.core.logging import get_logger
 from app.models import (
     AnalysisJob,
     CodeSymbol,
+    DecisionEntry,
     Document,
     DriftFinding,
     FindingStatus,
@@ -32,6 +34,8 @@ from app.schemas import (
     AskRequest,
     AskResponse,
     Citation,
+    DecisionResponse,
+    DecisionSource,
     DocCoverageReport,
     FindingResponse,
     GuideArea,
@@ -42,6 +46,7 @@ from app.schemas import (
     JobResponse,
     KnowledgeStats,
     OwnershipReport,
+    PrBriefing,
     RepositoryDetail,
     RepositoryGuideResponse,
     RepositoryInsights,
@@ -49,9 +54,12 @@ from app.schemas import (
     RiskFindingResponse,
     RiskPath,
 )
+from app.services import decisions as decisions_svc
 from app.services import insights as insights_svc
 from app.services import metrics as metrics_svc
 from app.services import orientation as orientation_svc
+from app.services import pr_impact as pr_impact_svc
+from app.services.github.client import GitHubClient
 from app.services.qa import answer_question, retrieve
 from app.workers.indexing import run_index_job
 from app.workers.ingest import run_ingest_history_job
@@ -383,6 +391,100 @@ def repository_health(
     """Composite knowledge-health score (documentation, coverage, risk, ownership)."""
     repo = _get_owned_repo(db, user.id, repo_id)
     return HealthScore(**metrics_svc.compute_health(db, repo.id))
+
+
+def _decision_to_response(d: DecisionEntry) -> DecisionResponse:
+    return DecisionResponse(
+        id=d.id,
+        title=d.title,
+        summary=d.summary,
+        sources=[DecisionSource(**s) for s in (d.sources or [])],
+        decided_at=d.decided_at,
+        generated_at=d.updated_at,
+    )
+
+
+@router.get("/{repo_id}/decisions", response_model=list[DecisionResponse])
+def list_decisions(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[DecisionResponse]:
+    """The repository's synthesized, cited decision timeline (most recent first)."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    return [_decision_to_response(d) for d in decisions_svc.list_decisions(db, repo.id)]
+
+
+@router.post("/{repo_id}/decisions", response_model=list[DecisionResponse])
+async def generate_decisions(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[DecisionResponse]:
+    """Synthesize (or refresh) the decision timeline from ingested history."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    entries = decisions_svc.gather_entries(db, repo.id)
+    if not entries:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ingest the repository's history first (Engineering Memory).",
+        )
+    ai = get_ai_service()
+    if not ai.available:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No AI provider configured"
+        )
+    try:
+        decisions, provider, model = await decisions_svc.generate_decisions(ai, entries)
+    except (AllProvidersFailedError, ValueError) as exc:
+        logger.warning("decision synthesis failed repo=%s: %s", repo.id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI generation is unavailable right now. Please try again.",
+        ) from exc
+    decisions_svc.replace_decisions(db, repo.id, decisions, provider=provider, model=model)
+    return [_decision_to_response(d) for d in decisions_svc.list_decisions(db, repo.id)]
+
+
+@router.get("/{repo_id}/pr-briefing/{pr_number}", response_model=PrBriefing)
+async def pr_impact_briefing(
+    repo_id: int,
+    pr_number: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PrBriefing:
+    """Pre-merge impact briefing for a pull request: per-file hotspot risk,
+    module ownership / bus factor, and prior test-risk findings."""
+    if pr_number <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid PR number")
+    repo = _get_owned_repo(db, user.id, repo_id)
+    installation = db.get(GitHubInstallation, repo.installation_id)
+    if installation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Installation not found"
+        )
+    client = GitHubClient(get_github_auth())
+    try:
+        changed = await client.list_pull_request_files(
+            installation.installation_id, repo.full_name, pr_number
+        )
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"PR #{pr_number} not found"
+            ) from exc
+        logger.warning("pr-briefing GitHub error repo=%s pr=%s: %s", repo.id, pr_number, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="GitHub request failed."
+        ) from exc
+    except httpx.HTTPError as exc:
+        logger.warning("pr-briefing GitHub failed repo=%s pr=%s: %s", repo.id, pr_number, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="GitHub request failed."
+        ) from exc
+
+    briefing = pr_impact_svc.build_briefing(db, repo.id, [f.path for f in changed])
+    return PrBriefing(pr_number=pr_number, **briefing)
 
 
 @router.post("/{repo_id}/ingest-history", response_model=IngestResponse, status_code=202)
