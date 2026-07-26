@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -14,6 +16,7 @@ from app.models import (
     CodeSymbol,
     Document,
     DriftFinding,
+    FindingStatus,
     GitHubInstallation,
     IndexingStatus,
     KnowledgeEntry,
@@ -22,6 +25,7 @@ from app.models import (
     User,
 )
 from app.schemas import (
+    ActivityPoint,
     AnalyzePrRequest,
     AnalyzePrResponse,
     AskRequest,
@@ -32,9 +36,12 @@ from app.schemas import (
     JobResponse,
     KnowledgeStats,
     RepositoryDetail,
+    RepositoryInsights,
     RepositoryResponse,
     RiskFindingResponse,
+    RiskPath,
 )
+from app.services import insights as insights_svc
 from app.services.qa import answer_question, retrieve
 from app.workers.indexing import run_index_job
 from app.workers.ingest import run_ingest_history_job
@@ -221,6 +228,106 @@ def list_risk_findings(
         )
         for f in rows
     ]
+
+
+@router.get("/{repo_id}/insights", response_model=RepositoryInsights)
+def repository_insights(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> RepositoryInsights:
+    """Aggregated analytics for one repository: documentation-health score,
+    severity/risk breakdowns, finding status, activity, and knowledge coverage."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+
+    drift = (
+        db.execute(
+            select(DriftFinding)
+            .join(AnalysisJob, DriftFinding.analysis_job_id == AnalysisJob.id)
+            .where(AnalysisJob.repository_id == repo.id)
+        )
+        .scalars()
+        .all()
+    )
+    risk = (
+        db.execute(
+            select(RiskFinding)
+            .join(AnalysisJob, RiskFinding.analysis_job_id == AnalysisJob.id)
+            .where(AnalysisJob.repository_id == repo.id)
+        )
+        .scalars()
+        .all()
+    )
+
+    drift_by_severity: dict[str, int] = {}
+    open_by_severity: dict[str, int] = {}
+    drift_open = 0
+    for f in drift:
+        sev = f.severity.value
+        drift_by_severity[sev] = drift_by_severity.get(sev, 0) + 1
+        if f.status == FindingStatus.detected:
+            drift_open += 1
+            open_by_severity[sev] = open_by_severity.get(sev, 0) + 1
+
+    risk_by_level: dict[str, int] = {}
+    tested = with_test_info = 0
+    path_counts: dict[str, int] = {}
+    path_level: dict[str, str] = {}
+    for r in risk:
+        level = r.risk_level.value
+        risk_by_level[level] = risk_by_level.get(level, 0) + 1
+        has_tests = (r.evidence or {}).get("has_tests")
+        if has_tests is not None:
+            with_test_info += 1
+            if has_tests:
+                tested += 1
+        path_counts[r.path] = path_counts.get(r.path, 0) + 1
+        if insights_svc.severity_rank(level) >= insights_svc.severity_rank(
+            path_level.get(r.path, "info")
+        ):
+            path_level[r.path] = level
+
+    top_risk_paths = [
+        RiskPath(path=path, risk_level=path_level[path], count=count)
+        for path, count in sorted(
+            path_counts.items(),
+            key=lambda kv: (insights_svc.severity_rank(path_level[kv[0]]), kv[1]),
+            reverse=True,
+        )[:5]
+    ]
+
+    knowledge_rows = db.execute(
+        select(KnowledgeEntry.kind, func.count())
+        .where(KnowledgeEntry.repository_id == repo.id)
+        .group_by(KnowledgeEntry.kind)
+    ).all()
+    knowledge_by_kind = {kind.value: count for kind, count in knowledge_rows}
+
+    activity = [
+        ActivityPoint(**point)
+        for point in insights_svc.activity_series(
+            [f.created_at for f in drift],
+            [r.created_at for r in risk],
+            days=14,
+            now=datetime.now(UTC),
+        )
+    ]
+
+    return RepositoryInsights(
+        repository_id=repo.id,
+        doc_health=insights_svc.doc_health_score(open_by_severity),
+        drift_total=len(drift),
+        drift_open=drift_open,
+        drift_by_severity=drift_by_severity,
+        risk_total=len(risk),
+        risk_by_level=risk_by_level,
+        high_risk=risk_by_level.get("high", 0),
+        tested_ratio=(tested / with_test_info) if with_test_info else None,
+        knowledge_total=sum(knowledge_by_kind.values()),
+        knowledge_by_kind=knowledge_by_kind,
+        activity=activity,
+        top_risk_paths=top_risk_paths,
+    )
 
 
 @router.post("/{repo_id}/ingest-history", response_model=IngestResponse, status_code=202)

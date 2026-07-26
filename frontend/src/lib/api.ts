@@ -52,6 +52,49 @@ export interface Job {
   finished_at: string | null;
 }
 
+export interface ActivityPoint {
+  date: string;
+  drift: number;
+  risk: number;
+}
+
+export interface RiskPath {
+  path: string;
+  risk_level: string;
+  count: number;
+}
+
+export interface RepositoryInsights {
+  repository_id: number;
+  doc_health: number;
+  drift_total: number;
+  drift_open: number;
+  drift_by_severity: Record<string, number>;
+  risk_total: number;
+  risk_by_level: Record<string, number>;
+  high_risk: number;
+  tested_ratio: number | null;
+  knowledge_total: number;
+  knowledge_by_kind: Record<string, number>;
+  activity: ActivityPoint[];
+  top_risk_paths: RiskPath[];
+}
+
+export interface TeamInsights {
+  id: number;
+  installation_id: number;
+  account_login: string;
+  account_type: string;
+  suspended: boolean;
+  repo_count: number;
+  indexed_count: number;
+  drift_total: number;
+  risk_total: number;
+  high_risk: number;
+  knowledge_total: number;
+  last_activity_at: string | null;
+}
+
 export interface Finding {
   id: number;
   analysis_job_id: number;
@@ -156,7 +199,10 @@ export const api = {
   installUrl: () => request<{ install_url: string }>("/api/v1/github/install-url"),
   repositories: () => request<Repository[]>("/api/v1/repositories"),
   repository: (id: number) => request<RepositoryDetail>(`/api/v1/repositories/${id}`),
+  repositoryInsights: (id: number) =>
+    request<RepositoryInsights>(`/api/v1/repositories/${id}/insights`),
   jobs: (id: number) => request<Job[]>(`/api/v1/repositories/${id}/jobs`),
+  teams: () => request<TeamInsights[]>("/api/v1/teams"),
   connectRepository: (id: number) =>
     request<Repository>(`/api/v1/repositories/${id}/connect`, { method: "POST" }),
   findings: (repoId: number) =>

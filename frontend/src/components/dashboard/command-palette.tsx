@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Search,
   Sun,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/provider";
@@ -71,6 +72,7 @@ export function CommandPalette() {
       { id: "nav-overview", label: "Overview", group: "Navigate", icon: LayoutDashboard, run: go("/dashboard") },
       { id: "nav-repos", label: "Repositories", group: "Navigate", icon: FolderGit2, run: go("/dashboard/repositories") },
       { id: "nav-insights", label: "Insights", group: "Navigate", icon: Lightbulb, run: go("/dashboard/insights") },
+      { id: "nav-teams", label: "Teams", group: "Navigate", icon: Users, run: go("/dashboard/teams") },
       { id: "nav-memory", label: "Engineering memory", group: "Navigate", icon: Brain, run: go("/dashboard/memory") },
     ];
     const repoCmds: Command[] = repos.map((r) => ({

@@ -117,6 +117,49 @@ class KnowledgeStats(BaseModel):
     last_occurred_at: datetime | None = None
 
 
+class ActivityPoint(BaseModel):
+    date: str
+    drift: int
+    risk: int
+
+
+class RiskPath(BaseModel):
+    path: str
+    risk_level: str
+    count: int
+
+
+class RepositoryInsights(BaseModel):
+    repository_id: int
+    doc_health: int
+    drift_total: int
+    drift_open: int
+    drift_by_severity: dict[str, int]
+    risk_total: int
+    risk_by_level: dict[str, int]
+    high_risk: int
+    tested_ratio: float | None = None
+    knowledge_total: int
+    knowledge_by_kind: dict[str, int]
+    activity: list[ActivityPoint]
+    top_risk_paths: list[RiskPath]
+
+
+class TeamInsights(BaseModel):
+    id: int
+    installation_id: int
+    account_login: str
+    account_type: str
+    suspended: bool
+    repo_count: int
+    indexed_count: int
+    drift_total: int
+    risk_total: int
+    high_risk: int
+    knowledge_total: int
+    last_activity_at: datetime | None = None
+
+
 class RiskFindingResponse(BaseModel):
     id: int
     path: str

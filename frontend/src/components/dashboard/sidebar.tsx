@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Brain, FolderGit2, LayoutDashboard, Lightbulb } from "lucide-react";
+import { Brain, FolderGit2, LayoutDashboard, Lightbulb, Users } from "lucide-react";
 import { Logo } from "@/components/brand";
 import { useDashboard } from "@/components/dashboard/provider";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/dashboard/repositories", label: "Repositories", icon: FolderGit2 },
   { href: "/dashboard/insights", label: "Insights", icon: Lightbulb },
+  { href: "/dashboard/teams", label: "Teams", icon: Users },
   { href: "/dashboard/memory", label: "Engineering memory", icon: Brain },
 ];
 

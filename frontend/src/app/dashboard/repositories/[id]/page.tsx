@@ -6,7 +6,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Boxes,
+  Brain,
   FileText,
+  Gauge,
   Loader2,
   Lock,
   Sparkles,
@@ -14,12 +16,13 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ActivityArea, Bars, CHART_COLORS, Donut } from "@/components/dashboard/charts";
 import { DriftFindingCard, RiskFindingCard } from "@/components/dashboard/finding-cards";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { useDashboard } from "@/components/dashboard/provider";
-import { Badge } from "@/components/ui/badge";
+import { Badge, severityTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "@/components/ui/stat-card";
@@ -28,9 +31,17 @@ import {
   type Finding,
   type Job,
   type RepositoryDetail,
+  type RepositoryInsights,
   type RiskFinding,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+const SEVERITY_COLORS: Record<string, string> = {
+  high: CHART_COLORS.danger,
+  medium: CHART_COLORS.warning,
+  low: CHART_COLORS.primary,
+  info: CHART_COLORS.muted,
+};
 
 const STATUS_TONE = {
   indexed: "success",
@@ -66,6 +77,7 @@ export default function RepositoryDetailPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [drift, setDrift] = useState<Finding[]>([]);
   const [risk, setRisk] = useState<RiskFinding[]>([]);
+  const [insights, setInsights] = useState<RepositoryInsights | null>(null);
   const [tab, setTab] = useState<"drift" | "risk">("drift");
   const [showDismissed, setShowDismissed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -74,14 +86,16 @@ export default function RepositoryDetailPage() {
     try {
       const detail = await api.repository(repoId);
       setRepo(detail);
-      const [jobsRes, driftRes, riskRes] = await Promise.all([
+      const [jobsRes, driftRes, riskRes, insightsRes] = await Promise.all([
         api.jobs(repoId).catch(() => [] as Job[]),
         api.findings(repoId).catch(() => [] as Finding[]),
         api.riskFindings(repoId).catch(() => [] as RiskFinding[]),
+        api.repositoryInsights(repoId).catch(() => null),
       ]);
       setJobs(jobsRes);
       setDrift(driftRes);
       setRisk(riskRes);
+      setInsights(insightsRes);
       setPhase("ready");
     } catch {
       setPhase("error");
@@ -227,6 +241,8 @@ export default function RepositoryDetailPage() {
         />
       </div>
 
+      {insights && <InsightsSection insights={insights} />}
+
       <div className="mt-8 grid gap-6 lg:grid-cols-[320px_1fr]">
         <JobsTimeline jobs={jobs} />
 
@@ -274,6 +290,127 @@ export default function RepositoryDetailPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function toSlices(counts: Record<string, number>, order: string[]) {
+  return order
+    .filter((k) => (counts[k] ?? 0) > 0)
+    .map((k) => ({ name: k, value: counts[k], color: SEVERITY_COLORS[k] ?? CHART_COLORS.primary }));
+}
+
+function InsightsSection({ insights }: { insights: RepositoryInsights }) {
+  const activity = insights.activity.map((p) => ({ date: p.date.slice(5), count: p.drift + p.risk }));
+  const severity = toSlices(insights.drift_by_severity, ["high", "medium", "low", "info"]);
+  const riskBars = ["high", "medium", "low"]
+    .filter((k) => (insights.risk_by_level[k] ?? 0) > 0)
+    .map((k) => ({ name: k, value: insights.risk_by_level[k] }));
+  const knowledge = Object.entries(insights.knowledge_by_kind);
+  const health = insights.doc_health;
+  const healthColor =
+    health >= 80 ? "text-success" : health >= 50 ? "text-warning" : "text-danger";
+
+  return (
+    <div className="mt-4 grid gap-4 lg:grid-cols-3">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Documentation health</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-end gap-2">
+            <Gauge className={cn("mb-1 h-5 w-5", healthColor)} />
+            <span className={cn("text-4xl font-semibold tabular-nums", healthColor)}>{health}</span>
+            <span className="mb-1 text-sm text-muted-foreground">/ 100</span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {insights.drift_open} open drift finding{insights.drift_open === 1 ? "" : "s"} of{" "}
+            {insights.drift_total}
+          </p>
+          <div className="mt-4 space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-muted-foreground">
+                <ShieldAlert className="h-3.5 w-3.5" /> Test coverage
+              </span>
+              <span className="tabular-nums font-medium">
+                {insights.tested_ratio === null
+                  ? "—"
+                  : `${Math.round(insights.tested_ratio * 100)}%`}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-muted-foreground">
+                <Brain className="h-3.5 w-3.5" /> Knowledge entries
+              </span>
+              <span className="tabular-nums font-medium">{insights.knowledge_total}</span>
+            </div>
+          </div>
+          {knowledge.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {knowledge.map(([kind, n]) => (
+                <span
+                  key={kind}
+                  className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-[11px] text-muted-foreground"
+                >
+                  {kind} · {n}
+                </span>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Drift by severity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Donut data={severity} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Analysis activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ActivityArea data={activity} />
+        </CardContent>
+      </Card>
+
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle className="text-base">Top risk files</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {insights.top_risk_paths.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No risk findings yet.</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {insights.top_risk_paths.map((p) => (
+                <li key={p.path} className="flex items-center gap-3 py-2">
+                  <Badge tone={severityTone(p.risk_level)}>{p.risk_level}</Badge>
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+                    {p.path}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {p.count} finding{p.count === 1 ? "" : "s"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Risk by level</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Bars data={riskBars} color={CHART_COLORS.warning} />
+        </CardContent>
+      </Card>
     </div>
   );
 }
