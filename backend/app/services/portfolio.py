@@ -64,6 +64,7 @@ def build_portfolio(db: Session, user_id: int) -> dict:
             {
                 "repository_id": repo.id,
                 "full_name": repo.full_name,
+                "default_branch": repo.default_branch,
                 "indexing_status": repo.indexing_status.value,
                 "health_score": health["score"],
                 "health_level": health["level"],

@@ -321,6 +321,7 @@ class HealthScore(BaseModel):
 class PortfolioRepo(BaseModel):
     repository_id: int
     full_name: str
+    default_branch: str
     indexing_status: str
     health_score: int
     health_level: str
@@ -348,6 +349,12 @@ class ModuleCount(BaseModel):
     changes: int
 
 
+class OwnedArea(BaseModel):
+    repo: str
+    module: str
+    branch: str
+
+
 class Expert(BaseModel):
     author: str
     changes: int
@@ -356,6 +363,7 @@ class Expert(BaseModel):
     top_modules: list[ModuleCount] = []
     languages: list[str] = []
     prs_authored: int = 0
+    owns: list[OwnedArea] = []
     last_active: datetime | None = None
 
 

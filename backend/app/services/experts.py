@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import FileChange, GitHubInstallation, KnowledgeEntry, KnowledgeKind, Repository
+from app.services import metrics as metrics_svc
 
 _EXT_LANG = {
     "py": "Python", "ts": "TypeScript", "tsx": "TypeScript", "js": "JavaScript",
@@ -30,14 +31,26 @@ def build_experts(db: Session, user_id: int, *, q: str | None = None, limit: int
     the churn history and pull-request history. Optional `q` filters by author,
     repository, module, or language."""
     repo_rows = db.execute(
-        select(Repository.id, Repository.full_name)
+        select(Repository.id, Repository.full_name, Repository.default_branch)
         .join(GitHubInstallation, Repository.installation_id == GitHubInstallation.id)
         .where(GitHubInstallation.owner_user_id == user_id)
     ).all()
     repo_name = {row[0]: row[1] for row in repo_rows}
+    repo_branch = {row[0]: row[2] for row in repo_rows}
     if not repo_name:
         return {"query": q, "experts": []}
     ids = list(repo_name)
+
+    # Sole-ownership (bus-factor) risk: which modules is each person the only
+    # real owner of, per repository — the actionable knowledge-concentration risk.
+    owns: dict[str, list[dict]] = {}
+    for rid, name in repo_name.items():
+        ownership = metrics_svc.compute_ownership(db, rid)
+        for m in ownership["modules"]:
+            if m["single_owner"]:
+                owns.setdefault(m["primary_owner"], []).append(
+                    {"repo": name, "module": m["module"], "branch": repo_branch[rid]}
+                )
 
     changes = db.execute(
         select(
@@ -90,6 +103,7 @@ def build_experts(db: Session, user_id: int, *, q: str | None = None, limit: int
             ],
             "languages": sorted(a["languages"]),
             "prs_authored": prs.get(name, 0),
+            "owns": owns.get(name, []),
             "last_active": a["last"],
         }
         for name, a in agg.items()

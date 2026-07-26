@@ -2,14 +2,84 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Gauge, LayoutGrid } from "lucide-react";
+import { ArrowRight, BookOpen, Flame, Gauge, LayoutGrid, ShieldAlert, Users } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatCard } from "@/components/ui/stat-card";
-import { api, type Portfolio } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { api, type Portfolio, type PortfolioRepo } from "@/lib/api";
+import { cn, ghBlobUrl } from "@/lib/utils";
+
+type Action = {
+  icon: typeof Flame;
+  tone: "danger" | "warning" | "primary";
+  text: React.ReactNode;
+  repoId: number;
+  priority: number;
+};
+
+function recommendedActions(repos: PortfolioRepo[]): Action[] {
+  const actions: Action[] = [];
+  for (const r of repos) {
+    if (r.risk_high > 0) {
+      actions.push({
+        icon: ShieldAlert,
+        tone: "danger",
+        priority: 100 + r.risk_high,
+        repoId: r.repository_id,
+        text: (
+          <>
+            Add tests in <b>{r.full_name}</b> — {r.risk_high} high-risk file
+            {r.risk_high === 1 ? "" : "s"}
+          </>
+        ),
+      });
+    }
+    if (r.single_owner_modules > 0) {
+      actions.push({
+        icon: Users,
+        tone: "warning",
+        priority: 60 + r.single_owner_modules,
+        repoId: r.repository_id,
+        text: (
+          <>
+            De-risk ownership in <b>{r.full_name}</b> — {r.single_owner_modules} single-owner
+            module{r.single_owner_modules === 1 ? "" : "s"}
+          </>
+        ),
+      });
+    }
+    if (r.drift_open > 0) {
+      actions.push({
+        icon: BookOpen,
+        tone: "primary",
+        priority: 40 + r.drift_open,
+        repoId: r.repository_id,
+        text: (
+          <>
+            Resolve doc drift in <b>{r.full_name}</b> — {r.drift_open} open finding
+            {r.drift_open === 1 ? "" : "s"}
+          </>
+        ),
+      });
+    }
+    if (r.doc_coverage_pct < 40 && r.indexing_status === "indexed") {
+      actions.push({
+        icon: BookOpen,
+        tone: "primary",
+        priority: 30 + (40 - r.doc_coverage_pct),
+        repoId: r.repository_id,
+        text: (
+          <>
+            Document <b>{r.full_name}</b> — only {r.doc_coverage_pct}% of source is covered
+          </>
+        ),
+      });
+    }
+  }
+  return actions.sort((a, b) => b.priority - a.priority).slice(0, 5);
+}
 
 function healthTone(score: number): "danger" | "warning" | "success" {
   if (score >= 80) return "success";
@@ -72,6 +142,8 @@ export default function PortfolioPage() {
             />
           </div>
 
+          <ActionsPanel repos={data.repos} />
+
           <Card className="mt-4">
             <CardContent className="p-0">
               <div className="overflow-x-auto">
@@ -130,9 +202,19 @@ export default function PortfolioPage() {
                           )}
                         </td>
                         <td className="max-w-[220px] px-4 py-2.5">
-                          <span className="block truncate font-mono text-xs text-muted-foreground">
-                            {r.top_hotspot ?? "—"}
-                          </span>
+                          {r.top_hotspot ? (
+                            <a
+                              href={ghBlobUrl(r.full_name, r.default_branch, r.top_hotspot)}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={`Open ${r.top_hotspot} on GitHub`}
+                              className="block truncate font-mono text-xs text-muted-foreground hover:text-primary hover:underline"
+                            >
+                              {r.top_hotspot}
+                            </a>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -144,6 +226,48 @@ export default function PortfolioPage() {
         </>
       )}
     </div>
+  );
+}
+
+function ActionsPanel({ repos }: { repos: PortfolioRepo[] }) {
+  const actions = recommendedActions(repos);
+  if (actions.length === 0) {
+    return (
+      <Card className="mt-4">
+        <CardContent className="py-4 text-sm text-muted-foreground">
+          Nothing urgent across the portfolio. Analyze pull requests and ingest history to surface
+          risks here.
+        </CardContent>
+      </Card>
+    );
+  }
+  const toneClass = {
+    danger: "text-danger",
+    warning: "text-warning",
+    primary: "text-primary",
+  } as const;
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle className="text-base">Recommended actions</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y divide-border">
+          {actions.map((a, i) => (
+            <li key={i} className="flex items-center gap-3 py-2.5">
+              <a.icon className={cn("h-4 w-4 shrink-0", toneClass[a.tone])} />
+              <span className="min-w-0 flex-1 text-sm">{a.text}</span>
+              <Link
+                href={`/dashboard/repositories/${a.repoId}`}
+                className="flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                Open <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 

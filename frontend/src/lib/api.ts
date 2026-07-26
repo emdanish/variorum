@@ -238,6 +238,7 @@ export interface ContradictionReport {
 export interface PortfolioRepo {
   repository_id: number;
   full_name: string;
+  default_branch: string;
   indexing_status: string;
   health_score: number;
   health_level: string;
@@ -263,6 +264,12 @@ export interface ModuleCount {
   changes: number;
 }
 
+export interface OwnedArea {
+  repo: string;
+  module: string;
+  branch: string;
+}
+
 export interface Expert {
   author: string;
   changes: number;
@@ -271,6 +278,7 @@ export interface Expert {
   top_modules: ModuleCount[];
   languages: string[];
   prs_authored: number;
+  owns: OwnedArea[];
   last_active: string | null;
 }
 

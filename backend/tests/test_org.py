@@ -119,6 +119,8 @@ def test_build_experts_and_filter(db_session):
     assert "Python" in by_author["alice"]["languages"]
     assert by_author["alice"]["prs_authored"] == 1
     assert "TypeScript" in by_author["bob"]["languages"]
+    # alice is the sole author of the billing module -> bus-factor risk
+    assert any(o["module"] == "billing" for o in by_author["alice"]["owns"])
 
     # filter by area
     filtered = experts_svc.build_experts(db_session, u.id, q="billing")
