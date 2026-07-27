@@ -70,7 +70,7 @@ backend/app/
     github/          App auth, OAuth, REST client, webhook verify, events, installations
     indexer/         tree-sitter code index, doc discovery, doc↔code linker, archive, pipeline
     analysis/        drift, doc_pr, docfix, pr_context, risk, testgen, test_pr
-    knowledge.py, qa.py, insights.py, orientation.py, users.py, schedule.py, monitoring.py, pr_comment.py
+    knowledge.py, qa.py, symbols.py, insights.py, orientation.py, users.py, schedule.py, monitoring.py, pr_comment.py
   workers/           indexing, pr_analysis, risk_analysis, pr_comment, ingest (BackgroundTasks)
 backend/alembic/     migrations         backend/tests/     pytest suite (+ conftest, _fakes)
 backend/scripts/     check_env.py, check_ai.py     backend/Dockerfile + entrypoint.sh
@@ -126,7 +126,8 @@ Chosen and *why*, with rejected alternatives — do not re-litigate without reas
 - **tree-sitter + tree-sitter-language-pack** over regex/LLM parsing — deterministic, fast, prebuilt grammars.
 - **AI over REST (no vendor SDKs)** — the `AIProvider` interface + `ProviderManager` give free provider swapping/fallback; SDKs would add weight and lock-in.
 - **Postgres full-text (tsvector) + embeddings** for semantic search — embeddings are JSONB ranked with in-process cosine by default; an **optional pgvector path** (guarded migration `c7d2f1a9b4e0` + `PGVECTOR_ENABLED`, auto-detected via `pgvector_active()` in `services/qa.py`) uses an indexed `<=>` query when the extension is present, and falls back to JSONB otherwise. `alembic upgrade head` never fails without pgvector.
-- **RAG corpus = ingested history + synthesized decisions.** `KnowledgeEntry` (commit/PR/issue) and `DecisionEntry` (the "why" timeline) are both embedded (`gemini-embedding-001`, 768-dim) and hybrid-retrieved (semantic ⊕ keyword) in the Q&A. The shared ranking primitive lives in `ai/rag.py` (`cosine`, `top_k_by_cosine`); `services/qa.py` blends both corpora into one cited answer. Embedding is best-effort at write time with `embed_missing` / `embed_missing_decisions` backfills. **Documents** (no stored body) and **code symbols** (high volume, low "why"-signal) are deliberately *not* embedded — keyword search covers them via unified search.
+- **RAG corpus = code + ingested history + synthesized decisions.** `CodeSymbol` (functions/classes), `KnowledgeEntry` (commit/PR/issue), and `DecisionEntry` (the "why" timeline) are all embedded (`gemini-embedding-001`, 768-dim) and hybrid-retrieved (semantic ⊕ keyword) in the Q&A. The shared ranking primitive lives in `ai/rag.py` (`cosine`, `top_k_by_cosine`); `services/qa.py` (`retrieve` / `retrieve_decisions` / `retrieve_code`) blends all three into one cited answer, and **code citations link to the exact lines on GitHub**. Embedding is best-effort at write time with `embed_missing` (knowledge), `embed_missing_decisions`, and `embed_missing_symbols` (`services/symbols.py`, capped per run) backfills. Symbol embedding runs after every index job. **Documents** have no stored body, so they stay on keyword search via unified search.
+- **Auto-freshness:** a `push` to a connected repo's default branch re-indexes it (and re-embeds symbols) via the webhook, so the code index and its embeddings stay current without a manual re-index. Snapshots are captured on each ingest + by the scheduler (see below).
 - **Next.js + Tailwind + shadcn-style** (copy-in components, no heavy UI dep) over MUI/Chakra — matches the dev-tool aesthetic, minimal deps, full control.
 - **Rejected / deferred:** Celery/Redis queue (using `BackgroundTasks` for MVP), Supabase (using plain Postgres per PRD), numpy (pure-Python cosine avoids the dep), vendor AI SDKs.
 

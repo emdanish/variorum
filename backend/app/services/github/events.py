@@ -26,6 +26,26 @@ class PRAnalysisRequest:
     head_sha: str | None
 
 
+def resolve_push_reindex(db: Session, payload: dict) -> int | None:
+    """Return the repository id to re-index for a `push` to the default branch of
+    a connected repo, or None. Keeps the code index (and its embeddings) fresh
+    without the user re-running indexing by hand."""
+    ref = payload.get("ref")
+    repo_payload = payload.get("repository") or {}
+    github_repo_id = repo_payload.get("id")
+    default_branch = repo_payload.get("default_branch")
+    if not ref or github_repo_id is None:
+        return None
+    # Only the default branch — feature-branch pushes shouldn't trigger a full
+    # re-index of the canonical tree.
+    if default_branch and ref != f"refs/heads/{default_branch}":
+        return None
+    repo = db.execute(
+        select(Repository).where(Repository.github_repo_id == github_repo_id)
+    ).scalar_one_or_none()
+    return repo.id if repo else None
+
+
 def resolve_pr_analysis(db: Session, payload: dict) -> PRAnalysisRequest | None:
     """Extract a PR-analysis request from a `pull_request` webhook payload, or
     None if the action is not analyzable or the repo is not connected."""

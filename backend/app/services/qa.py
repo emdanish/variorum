@@ -11,12 +11,14 @@ from app.ai.rag import top_k_by_cosine
 from app.ai.service import AIService
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models import DecisionEntry, KnowledgeEntry
+from app.models import CodeSymbol, DecisionEntry, KnowledgeEntry
+from app.services.symbols import RETRIEVABLE_KINDS
 
 logger = get_logger("variorum.qa")
 
 MAX_ENTRIES = 8
 MAX_DECISIONS = 3  # synthesized decisions blended in alongside raw history
+MAX_CODE = 5  # code symbols blended in so answers can cite the actual code
 MAX_BODY_CHARS = 600
 MIN_SIMILARITY = 0.4  # cosine floor to exclude clearly-unrelated vector hits
 
@@ -56,8 +58,8 @@ def pgvector_active(db: Session) -> bool:
 
 SYSTEM_PROMPT = (
     "You are Variorum's engineering-memory assistant. Answer the question using "
-    "ONLY the numbered context entries below (commits, pull requests, issues, and "
-    "synthesized engineering decisions). "
+    "ONLY the numbered context entries below (source code, commits, pull requests, "
+    "issues, and synthesized engineering decisions). "
     "Rules:\n"
     "- Base every statement on the provided context; never invent facts, APIs, or "
     "history.\n"
@@ -316,9 +318,96 @@ def retrieve_decisions(
     return out
 
 
+def retrieve_code(
+    db: Session,
+    repository_id: int,
+    question: str,
+    *,
+    k: int = MAX_CODE,
+    embedder: EmbeddingService | None = None,
+) -> list[CodeSymbol]:
+    """Retrieve code symbols relevant to a question — semantic (embedding cosine)
+    blended with an identifier keyword match, keyword-only when embeddings are
+    unavailable. Lets the Q&A cite the actual functions/classes, not just the
+    history written about them."""
+    words = re.findall(r"[A-Za-z0-9_]{3,}", question)[:6]
+    keyword_hits: list[CodeSymbol] = []
+    if words:
+        clauses = [CodeSymbol.name.ilike(f"%{w}%") for w in words] + [
+            CodeSymbol.path.ilike(f"%{w}%") for w in words
+        ]
+        keyword_hits = list(
+            db.execute(
+                select(CodeSymbol)
+                .where(
+                    CodeSymbol.repository_id == repository_id,
+                    CodeSymbol.kind.in_(RETRIEVABLE_KINDS),
+                    or_(*clauses),
+                )
+                .limit(k)
+            )
+            .scalars()
+            .all()
+        )
+    if embedder is None or not embedder.available:
+        return keyword_hits[:k]
+    query_vec = embedder.embed(question)
+    if not query_vec:
+        return keyword_hits[:k]
+
+    embedded = (
+        db.execute(
+            select(CodeSymbol).where(
+                CodeSymbol.repository_id == repository_id,
+                CodeSymbol.kind.in_(RETRIEVABLE_KINDS),
+                CodeSymbol.embedding.is_not(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    vector_hits = top_k_by_cosine(
+        query_vec, embedded, lambda s: s.embedding, k=k, min_similarity=MIN_SIMILARITY
+    )
+    seen: set[int] = set()
+    out: list[CodeSymbol] = []
+    for s in [*vector_hits, *keyword_hits]:
+        if s.id in seen:
+            continue
+        seen.add(s.id)
+        out.append(s)
+        if len(out) >= k:
+            break
+    return out
+
+
 def _entry_to_doc(e: KnowledgeEntry) -> _ContextDoc:
     return _ContextDoc(
         kind=e.kind.value, source_ref=e.source_ref, title=e.title, url=e.url, body=e.body
+    )
+
+
+def _code_url(repo_full_name: str | None, default_branch: str, s: CodeSymbol) -> str | None:
+    if not repo_full_name or not s.path:
+        return None
+    anchor = ""
+    if s.start_line:
+        anchor = f"#L{s.start_line}"
+        if s.end_line and s.end_line != s.start_line:
+            anchor += f"-L{s.end_line}"
+    return f"https://github.com/{repo_full_name}/blob/{default_branch}/{s.path}{anchor}"
+
+
+def _code_to_doc(
+    s: CodeSymbol, repo_full_name: str | None, default_branch: str
+) -> _ContextDoc:
+    lines = f":{s.start_line}" if s.start_line else ""
+    return _ContextDoc(
+        kind="code",
+        source_ref=f"{s.path}{lines}",
+        title=f"{s.name} ({s.kind})",
+        url=_code_url(repo_full_name, default_branch, s),
+        body=s.signature,
     )
 
 
@@ -345,13 +434,20 @@ async def answer_question(
     question: str,
     entries: list[KnowledgeEntry],
     decisions: list[DecisionEntry] | None = None,
+    code: list[CodeSymbol] | None = None,
+    *,
+    repo_full_name: str | None = None,
+    default_branch: str = "main",
 ) -> QAResult:
-    """Answer grounded in retrieved context. Blends synthesized decisions with raw
-    history entries when provided (decisions default to none, so existing
-    history-only callers are unchanged)."""
-    docs = [_entry_to_doc(e) for e in entries] + [
-        _decision_to_doc(d) for d in (decisions or [])
-    ]
+    """Answer grounded in retrieved context. Blends code symbols, synthesized
+    decisions, and raw history entries when provided (all optional, so existing
+    history-only callers are unchanged). Code citations link to the exact lines
+    on GitHub."""
+    docs = (
+        [_entry_to_doc(e) for e in entries]
+        + [_decision_to_doc(d) for d in (decisions or [])]
+        + [_code_to_doc(s, repo_full_name, default_branch) for s in (code or [])]
+    )
     if not docs:
         return QAResult(
             answer=(

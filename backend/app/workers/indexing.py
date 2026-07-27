@@ -82,13 +82,24 @@ def _run(
         job.status = JobStatus.succeeded
         job.finished_at = datetime.now(UTC)
         db.commit()
+
+        embedded = 0
+        try:
+            from app.ai.embeddings import get_embedding_service
+            from app.services.symbols import embed_missing_symbols
+
+            embedded = embed_missing_symbols(db, repo.id, get_embedding_service())
+        except Exception as exc:  # noqa: BLE001 — code embeddings are best-effort
+            logger.warning("symbol embedding failed repo=%s: %s", repo.full_name, exc)
+
         logger.info(
-            "indexed repo=%s files=%d symbols=%d docs=%d links=%d",
+            "indexed repo=%s files=%d symbols=%d docs=%d links=%d embedded=%d",
             repo.full_name,
             result.files,
             result.symbols,
             result.documents,
             result.links,
+            embedded,
         )
         return result
     except Exception as exc:  # noqa: BLE001 — record failure on the job, never crash the worker

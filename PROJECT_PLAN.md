@@ -995,6 +995,43 @@ production build passes. Phase 4 (4A/4B/4C/4D) complete. ADR
 
 ---
 
+## Phase 5 — Tier 1: code-aware memory + freshness (complete)
+
+The strategic step-back concluded the flagship (cited Q&A) could answer *why* but
+not *how*, because the code itself was never in the retrieval corpus — and the
+index only refreshed by hand. Tier 1 fixes both.
+
+- **Code-aware retrieval.** `CodeSymbol` gains an `embedding` (migration
+  `a4d9f2c81e63`); `services/symbols.py` embeds name+path+signature (capped per
+  run, logged if exceeded), run after every index job. `qa.retrieve_code` blends
+  semantic ⊕ identifier-keyword; `answer_question` folds code into the same cited
+  context as history + decisions. **Code citations link to the exact GitHub lines
+  (`#Lstart-Lend`)** — the answer jumps you to the real function.
+- **Auto-freshness.** A `push` to a connected repo's default branch re-indexes it
+  (and re-embeds symbols) via the webhook (`resolve_push_reindex`) — no manual
+  re-index to stay current. Feature-branch pushes are ignored.
+- **Actionable Ask UI.** The Engineering Memory answer now renders typed source
+  chips (Code / Decision / PR / Commit / Issue) with icons, readable labels, and
+  one-click jump-to-source — not truncated ref strings.
+
+Deliberately not embedding document bodies yet (Documents store no content) —
+noted as the next enhancement. Same providers, same free tiers → $0.
+
+Retrieval is restricted to real definitions — `function` / `method` / `class` /
+`interface` — so `import` lines (≈half the index) never pollute answers or waste
+embedding quota.
+
+**Status:** 249 backend tests (+6), mypy + ruff clean; frontend tsc + lint clean,
+production build passes. ADR
+[`0006`](./docs/adr/0006-code-aware-retrieval-and-freshness.md). Verified live on
+repo 11: keyword code-retrieval returns the right definitions with correct
+jump-to-line GitHub URLs (e.g. "webhook signature verification" →
+`verify_webhook_signature`). Live symbol *embedding* was rate-limited by the
+free-tier Gemini quota (429) at the time — the fallback degraded gracefully to
+keyword; embeddings backfill on the next index/push once quota resets.
+
+---
+
 ## Environment, skills & tooling
 
 **Permanent memory:** [`CLAUDE.md`](./CLAUDE.md) is the entry point for every

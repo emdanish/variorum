@@ -1,23 +1,75 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Brain, Database, Loader2, Send, Sparkles } from "lucide-react";
+import {
+  Brain,
+  CircleDot,
+  Code2,
+  Database,
+  ExternalLink,
+  GitCommit,
+  GitPullRequest,
+  Lightbulb,
+  Loader2,
+  Send,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { useDashboard } from "@/components/dashboard/provider";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { api, type AskResponse, type KnowledgeStats } from "@/lib/api";
+import { api, type AskResponse, type Citation, type KnowledgeStats } from "@/lib/api";
 
 const SUGGESTIONS = [
-  "Why did we change the AI provider fallback order?",
-  "What security hardening was done and why?",
   "How does documentation drift detection work?",
+  "Where is rate limiting implemented?",
+  "Why did we change the AI provider fallback order?",
 ];
+
+const KIND_META: Record<string, { icon: LucideIcon; label: string }> = {
+  code: { icon: Code2, label: "Code" },
+  decision: { icon: Lightbulb, label: "Decision" },
+  pull_request: { icon: GitPullRequest, label: "PR" },
+  commit: { icon: GitCommit, label: "Commit" },
+  issue: { icon: CircleDot, label: "Issue" },
+  review: { icon: GitPullRequest, label: "Review" },
+};
+
+function sourceText(c: Citation): string {
+  if (c.kind === "code") return c.source_ref; // path[:line]
+  if (c.kind === "commit") return c.source_ref.slice(0, 7);
+  if (c.kind === "pull_request") return `#${c.source_ref}`;
+  if (c.kind === "issue") return `#${c.source_ref}`;
+  return c.title || c.source_ref;
+}
+
+function SourceChip({ c }: { c: Citation }) {
+  const meta = KIND_META[c.kind] ?? { icon: Database, label: c.kind };
+  const Icon = meta.icon;
+  const inner = (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs transition-colors hover:border-primary/40 hover:bg-accent"
+      title={c.title ? `${meta.label}: ${c.title}` : meta.label}
+    >
+      <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+      <span className="font-medium text-muted-foreground">{meta.label}</span>
+      <span className="max-w-[220px] truncate font-mono text-foreground">{sourceText(c)}</span>
+      {c.url && <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />}
+    </span>
+  );
+  return c.url ? (
+    <a href={c.url} target="_blank" rel="noreferrer">
+      {inner}
+    </a>
+  ) : (
+    inner
+  );
+}
 
 export default function MemoryPage() {
   const { repos } = useDashboard();
@@ -87,7 +139,7 @@ export default function MemoryPage() {
     <div className="animate-fade-in space-y-4">
       <PageHeader
         title="Engineering memory"
-        description="Ask why the system is the way it is — answered from history, with citations."
+        description="Ask how the system works and why — answered from the code, decisions, and history, with citations that jump you to the exact source."
       />
 
       <Card>
@@ -174,22 +226,12 @@ export default function MemoryPage() {
               {answer.citations.length > 0 && (
                 <div className="mt-4 border-t border-border pt-3">
                   <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Sources
+                    Sources — click to open
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {answer.citations.map((c, i) =>
-                      c.url ? (
-                        <a key={i} href={c.url} target="_blank" rel="noreferrer">
-                          <Badge tone="primary" className="hover:bg-primary/20">
-                            {c.kind} {c.source_ref.slice(0, 8)}
-                          </Badge>
-                        </a>
-                      ) : (
-                        <Badge key={i} tone="outline">
-                          {c.kind} {c.source_ref.slice(0, 8)}
-                        </Badge>
-                      ),
-                    )}
+                    {answer.citations.map((c, i) => (
+                      <SourceChip key={i} c={c} />
+                    ))}
                   </div>
                 </div>
               )}

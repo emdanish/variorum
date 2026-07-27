@@ -7,8 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_settings
 from app.core.logging import get_logger
-from app.services.github.events import dispatch_webhook, resolve_pr_analysis
+from app.services.github.events import (
+    dispatch_webhook,
+    resolve_pr_analysis,
+    resolve_push_reindex,
+)
 from app.services.github.webhook import verify_webhook_signature
+from app.workers.indexing import run_index_job
 from app.workers.pr_analysis import run_pr_analysis_job
 from app.workers.pr_comment import run_pr_comment_job
 from app.workers.risk_analysis import run_risk_analysis_job
@@ -63,6 +68,14 @@ async def github_webhook(
                 require_enabled=True,
             )
             result = f"pr_analysis:queued:{request_.pr_number}"
+    elif event == "push":
+        repo_id = resolve_push_reindex(db, payload)
+        if repo_id is None:
+            result = "reindex:skipped"
+        else:
+            # Keep the index + embeddings fresh on default-branch pushes.
+            background_tasks.add_task(run_index_job, repo_id)
+            result = f"reindex:queued:{repo_id}"
     else:
         result = dispatch_webhook(db, event, payload)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import ForeignKey, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -22,6 +23,10 @@ class CodeSymbol(Base, TimestampMixin):
     start_line: Mapped[int | None] = mapped_column(Integer)
     end_line: Mapped[int | None] = mapped_column(Integer)
     signature: Mapped[str | None] = mapped_column(Text)
+    # Semantic-search embedding of the symbol (name + path + signature), so the
+    # engineering-memory Q&A can retrieve and cite the actual code, not just the
+    # history written about it. JSONB + in-process cosine, same as elsewhere.
+    embedding: Mapped[list[float] | None] = mapped_column(JSONB)
 
 
 class Document(Base, TimestampMixin):
