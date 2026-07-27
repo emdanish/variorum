@@ -67,3 +67,21 @@ def test_balance_reports_reset_time(db_session):
     t0 = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
     bal = credits.consume(db_session, user.id, limit=_LIMIT, window_seconds=_WINDOW, now=t0)
     assert bal.resets_at == t0 + timedelta(seconds=_WINDOW)
+
+
+def test_global_meter_accumulates_across_calls_and_rolls(db_session):
+    t0 = datetime(2026, 2, 1, 9, 0, tzinfo=UTC)
+    credits.consume_global(db_session, limit=100, window_seconds=_WINDOW, amount=5, now=t0)
+    credits.consume_global(db_session, limit=100, window_seconds=_WINDOW, amount=2, now=t0)
+
+    inside = credits.global_balance(
+        db_session, limit=100, window_seconds=_WINDOW, now=t0 + timedelta(minutes=10)
+    )
+    assert inside.used == 7
+    assert inside.remaining == 93
+
+    rolled = credits.global_balance(
+        db_session, limit=100, window_seconds=_WINDOW, now=t0 + timedelta(hours=2)
+    )
+    assert rolled.used == 0
+    assert rolled.remaining == 100

@@ -7,11 +7,14 @@ from sqlalchemy.orm import Session
 
 from app.ai.service import AIService, get_ai_service
 from app.core.config import Settings, get_settings
+from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models import User
 from app.services import credits as credits_svc
 from app.services.github.auth import GitHubAppAuth
 from app.services.github.oauth import GitHubOAuth
+
+logger = get_logger("variorum.credits")
 
 __all__ = [
     "get_db",
@@ -82,6 +85,13 @@ class CreditGuard:
             window_seconds=self._settings.credit_window_seconds,
             amount=amount,
         )
+        # The same spend also counts against the fleet-wide daily ceiling.
+        credits_svc.consume_global(
+            self._db,
+            limit=self._settings.global_daily_credits,
+            window_seconds=self._settings.credit_window_seconds,
+            amount=amount,
+        )
         self.committed = True
 
 
@@ -107,6 +117,28 @@ def require_credit(
             detail=(
                 f"You've used all {bal.limit} of your daily AI credits. "
                 f"They reset at {bal.resets_at:%H:%M UTC}. Try again then."
+            ),
+        )
+    # Fleet-wide hard stop: once the day's shared AI budget is spent, everyone
+    # waits for the reset — this is what keeps the free-tier quota from being
+    # drained across all tenants. It's the service's limit, not the user's, so
+    # it's a 503 (capacity), not a 429.
+    gbal = credits_svc.global_balance(
+        db,
+        limit=settings.global_daily_credits,
+        window_seconds=settings.credit_window_seconds,
+    )
+    if gbal.remaining <= 0:
+        logger.warning(
+            "global AI ceiling reached (limit=%d) — blocking until %s",
+            gbal.limit,
+            gbal.resets_at.isoformat(),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Variorum has reached its shared AI capacity for today. "
+                f"It refreshes at {gbal.resets_at:%H:%M UTC}. Please try again then."
             ),
         )
     return CreditGuard(db, user.id, settings)

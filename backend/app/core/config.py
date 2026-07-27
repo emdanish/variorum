@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # refreshes automatically once `credit_window_seconds` elapses.
     user_daily_credits: int = 150
     credit_window_seconds: int = 86_400  # 24h
+    # A fleet-wide daily ceiling on AI actions across ALL users — a hard stop
+    # that protects the shared free-tier quota once the day's budget is spent,
+    # regardless of any single user's remaining allotment.
+    global_daily_credits: int = 1_000
 
     # SQLAlchemy connection pool sizing (per process). Tune against the
     # database's max_connections and the number of running replicas.

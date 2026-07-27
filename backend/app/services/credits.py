@@ -6,7 +6,9 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import UsageCredit
+from app.models import GlobalUsage, UsageCredit
+
+_GLOBAL_SCOPE = "global"
 
 
 @dataclass(frozen=True)
@@ -36,14 +38,25 @@ def _get_or_create(db: Session, user_id: int, now: datetime) -> UsageCredit:
     return row
 
 
-def _roll(row: UsageCredit, window_seconds: int, now: datetime) -> None:
+def _get_or_create_global(db: Session, now: datetime) -> GlobalUsage:
+    row = db.execute(
+        select(GlobalUsage).where(GlobalUsage.scope == _GLOBAL_SCOPE)
+    ).scalar_one_or_none()
+    if row is None:
+        row = GlobalUsage(scope=_GLOBAL_SCOPE, period_start=now, used=0)
+        db.add(row)
+        db.flush()
+    return row
+
+
+def _roll(row: UsageCredit | GlobalUsage, window_seconds: int, now: datetime) -> None:
     """Reset the meter if the current window has fully elapsed."""
     if now - _aware(row.period_start) >= timedelta(seconds=window_seconds):
         row.period_start = now
         row.used = 0
 
 
-def _snapshot(row: UsageCredit, limit: int, window_seconds: int) -> CreditBalance:
+def _snapshot(row: UsageCredit | GlobalUsage, limit: int, window_seconds: int) -> CreditBalance:
     used = max(0, min(row.used, limit))
     return CreditBalance(
         limit=limit,
@@ -83,6 +96,39 @@ def consume(
     window first, so a spend at the start of a fresh window resets the count."""
     now = now or datetime.now(UTC)
     row = _get_or_create(db, user_id, now)
+    _roll(row, window_seconds, now)
+    row.used += amount
+    db.commit()
+    return _snapshot(row, limit, window_seconds)
+
+
+def global_balance(
+    db: Session,
+    *,
+    limit: int,
+    window_seconds: int,
+    now: datetime | None = None,
+) -> CreditBalance:
+    """Return the service-wide balance across all users, rolling the daily window
+    if it has elapsed."""
+    now = now or datetime.now(UTC)
+    row = _get_or_create_global(db, now)
+    _roll(row, window_seconds, now)
+    db.commit()
+    return _snapshot(row, limit, window_seconds)
+
+
+def consume_global(
+    db: Session,
+    *,
+    limit: int,
+    window_seconds: int,
+    amount: int = 1,
+    now: datetime | None = None,
+) -> CreditBalance:
+    """Spend ``amount`` against the fleet-wide ceiling and return the new balance."""
+    now = now or datetime.now(UTC)
+    row = _get_or_create_global(db, now)
     _roll(row, window_seconds, now)
     row.used += amount
     db.commit()

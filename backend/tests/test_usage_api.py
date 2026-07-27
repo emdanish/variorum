@@ -73,3 +73,22 @@ def test_ai_endpoint_blocked_with_429_when_credits_exhausted(authed_client, db_s
         assert "credit" in resp.json()["detail"].lower()
     finally:
         app.dependency_overrides.pop(get_settings, None)
+
+
+def test_ai_endpoint_blocked_with_503_when_global_ceiling_reached(authed_client, db_session):
+    api_client, user = authed_client
+    # User still has plenty of personal credits, but the fleet-wide ceiling is spent.
+    small = Settings(_env_file=None, user_daily_credits=1000, global_daily_credits=1)
+    app.dependency_overrides[get_settings] = lambda: small
+    try:
+        repo = _seed_repo(db_session, user.id)
+        credits.consume_global(
+            db_session, limit=1, window_seconds=small.credit_window_seconds
+        )
+        resp = api_client.post(
+            f"/api/v1/repositories/{repo.id}/analyze-pr", json={"pr_number": 5}
+        )
+        assert resp.status_code == 503
+        assert "capacity" in resp.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.pop(get_settings, None)

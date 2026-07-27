@@ -882,6 +882,12 @@ the AI free-tier fallback add no cost).
   Overview usage card, auto-refreshed via a `variorum:usage-changed` event fired
   after each metered action. Deterministic endpoints (pr-briefing, pr-comment)
   are **not** metered — credits track real AI spend only.
+- **Fleet-wide daily ceiling:** a single-row `GlobalUsage` meter (migration
+  `e1f4a7c2b9d3`, `GLOBAL_DAILY_CREDITS`, default 1000) caps total AI actions
+  across *all* users per day — a hard stop that protects the shared free-tier
+  quota regardless of any one user's remaining allotment. `require_credit`
+  checks it after the per-user cap and returns **503** (capacity, logged at
+  WARNING) when spent; `CreditGuard.commit()` increments both meters together.
 
 ---
 
