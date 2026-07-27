@@ -1068,6 +1068,22 @@ below as "the numbers." Findings are now tagged with their `repository_id` clien
 side so cross-repo views can deep-link back. Frontend-only; tsc + lint + build
 clean.
 
+### Tier 3 — finding feedback loop (complete)
+
+Dismissing a finding no longer means it returns on the next analysis. A
+`Suppression` row (migration `b9c1e7f42a08`, keyed by repo + kind + target)
+records the dismissal; the drift/risk workers **skip creating findings for
+suppressed targets** (count logged), and **restore** lifts the suppression.
+Dismiss now means *"stop flagging this doc/file until I restore it"* — the noise a
+reviewer clears stays cleared, so remaining findings are the un-judged ones.
+Deterministic, AI-independent. `services/suppressions.py`; dismiss/restore
+endpoints wire it; dismiss/restore toasts explain the behavior. ADR
+[`0008`](./docs/adr/0008-finding-feedback-loop.md).
+
+**Status:** 260 backend tests (+5), mypy + ruff clean; frontend tsc + lint clean,
+production build passes. Phase 5 Tier 3: actionable Overview + feedback loop done;
+document-body indexing remains the one open enhancement.
+
 ---
 
 ## Environment, skills & tooling

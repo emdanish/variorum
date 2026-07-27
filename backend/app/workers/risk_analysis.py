@@ -19,6 +19,7 @@ from app.models import (
     Repository,
     RiskFinding,
 )
+from app.services import suppressions as suppressions_svc
 from app.services.analysis.risk import (
     FileSignals,
     RiskVerdict,
@@ -119,7 +120,12 @@ def _run(
         if errors and not assessed:
             raise RuntimeError(f"all {errors} file assessment(s) failed")
 
+        suppressed = suppressions_svc.suppressed_targets(db, repo.id, suppressions_svc.RISK)
+        created = 0
         for changed, verdict, signals in assessed:
+            if changed.path in suppressed:
+                continue
+            created += 1
             db.add(
                 RiskFinding(
                     analysis_job_id=job.id,
@@ -143,9 +149,13 @@ def _run(
         job.finished_at = datetime.now(UTC)
         db.commit()
         logger.info(
-            "risk analysis done repo=%s pr=%s findings=%d", repo.full_name, pr_number, len(assessed)
+            "risk analysis done repo=%s pr=%s findings=%d suppressed=%d",
+            repo.full_name,
+            pr_number,
+            created,
+            len(assessed) - created,
         )
-        return len(assessed)
+        return created
     except Exception as exc:  # noqa: BLE001 — record failure on the job, never crash
         db.rollback()
         failed_job = db.get(AnalysisJob, job_id)

@@ -21,6 +21,7 @@ from app.models import (
     User,
 )
 from app.schemas import FindingResponse, GeneratedPRResponse, JobDetail, RiskFindingResponse
+from app.services import suppressions as suppressions_svc
 from app.services.analysis.doc_pr import create_doc_fix_pr
 from app.services.analysis.test_pr import create_test_pr
 from app.services.github.client import GitHubClient
@@ -137,6 +138,8 @@ def dismiss_finding(
     if finding.status != FindingStatus.pr_opened:
         finding.status = FindingStatus.dismissed
         db.commit()
+        # Stop re-nagging: suppress this doc's drift on future re-analysis.
+        _suppress_drift(db, finding, suppressions_svc.suppress)
         db.refresh(finding)
     return finding_to_response(finding)
 
@@ -151,8 +154,17 @@ def restore_finding(
     if finding.status == FindingStatus.dismissed:
         finding.status = FindingStatus.detected
         db.commit()
+        _suppress_drift(db, finding, suppressions_svc.unsuppress)
         db.refresh(finding)
     return finding_to_response(finding)
+
+
+def _suppress_drift(db: Session, finding: DriftFinding, action: Any) -> None:
+    """Apply a suppress/unsuppress action for a drift finding's document path."""
+    target = (finding.evidence or {}).get("document_path")
+    job = db.get(AnalysisJob, finding.analysis_job_id)
+    if target and job is not None:
+        action(db, job.repository_id, suppressions_svc.DRIFT, target)
 
 
 async def _run_pr_generation(
@@ -265,6 +277,7 @@ def dismiss_risk_finding(
     finding = _owned_risk_finding(db, user.id, finding_id)
     finding.status = "dismissed"
     db.commit()
+    _suppress_risk(db, finding, suppressions_svc.suppress)
     db.refresh(finding)
     return risk_to_response(finding)
 
@@ -278,5 +291,13 @@ def restore_risk_finding(
     finding = _owned_risk_finding(db, user.id, finding_id)
     finding.status = "open"
     db.commit()
+    _suppress_risk(db, finding, suppressions_svc.unsuppress)
     db.refresh(finding)
     return risk_to_response(finding)
+
+
+def _suppress_risk(db: Session, finding: RiskFinding, action: Any) -> None:
+    """Apply a suppress/unsuppress action for a risk finding's file path."""
+    job = db.get(AnalysisJob, finding.analysis_job_id)
+    if finding.path and job is not None:
+        action(db, job.repository_id, suppressions_svc.RISK, finding.path)

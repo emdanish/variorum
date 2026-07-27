@@ -22,12 +22,12 @@ function useTriage<T>(
   onChange?: (updated: T) => void,
 ) {
   const [busy, setBusy] = useState(false);
-  const run = async (fn: () => Promise<T>, ok: string) => {
+  const run = async (fn: () => Promise<T>, ok: string, description?: string) => {
     setBusy(true);
     try {
       const updated = await fn();
       onChange?.(updated);
-      toast.success(ok);
+      toast.success(ok, description ? { description } : undefined);
     } catch (e) {
       toast.error("Couldn't update finding", { description: (e as Error).message });
     } finally {
@@ -36,8 +36,10 @@ function useTriage<T>(
   };
   return {
     busy,
-    onDismiss: () => void run(dismiss, "Finding dismissed"),
-    onRestore: () => void run(restore, "Finding restored"),
+    onDismiss: () =>
+      void run(dismiss, "Finding dismissed", "Won't be flagged again unless you restore it."),
+    onRestore: () =>
+      void run(restore, "Finding restored", "It can be flagged again on future analysis."),
   };
 }
 

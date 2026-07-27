@@ -24,6 +24,7 @@ from app.models.metrics import FileChange
 from app.models.monitoring import Alert, MetricSnapshot
 from app.models.orientation import RepositoryGuide
 from app.models.schedule import DigestSchedule
+from app.models.suppression import Suppression
 from app.models.token import ApiToken
 from app.models.user import User
 
@@ -55,5 +56,6 @@ __all__ = [
     "Repository",
     "RepositoryGuide",
     "RiskFinding",
+    "Suppression",
     "User",
 ]

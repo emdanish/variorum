@@ -21,6 +21,7 @@ from app.models import (
     JobType,
     Repository,
 )
+from app.services import suppressions as suppressions_svc
 from app.services.analysis.drift import ChangedFileDiff, DriftVerdict, assess_document_drift
 from app.services.analysis.pr_context import DriftCandidate, build_candidates
 from app.services.github.auth import GitHubAppAuth
@@ -110,9 +111,14 @@ def _run(
         if errors and not assessed:
             raise RuntimeError(f"all {errors} document assessment(s) failed")
 
+        suppressed = suppressions_svc.suppressed_targets(db, repo.id, suppressions_svc.DRIFT)
         findings = 0
+        skipped = 0
         for candidate, verdict in assessed:
             if not verdict.drifted:
+                continue
+            if candidate.document_path in suppressed:
+                skipped += 1
                 continue
             db.add(
                 DriftFinding(
@@ -139,7 +145,11 @@ def _run(
         job.finished_at = datetime.now(UTC)
         db.commit()
         logger.info(
-            "pr analysis done repo=%s pr=%s findings=%d", repo.full_name, pr_number, findings
+            "pr analysis done repo=%s pr=%s findings=%d suppressed=%d",
+            repo.full_name,
+            pr_number,
+            findings,
+            skipped,
         )
         return findings
     except Exception as exc:  # noqa: BLE001 — record failure on the job, never crash the worker
