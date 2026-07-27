@@ -14,6 +14,15 @@ function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 px-2.5 py-1.5">
+      <div className="text-base font-semibold tabular-nums">{value}</div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
 export function MonitoringSection({ repoId }: { repoId: number }) {
   const [loading, setLoading] = useState(true);
   const [snapshots, setSnapshots] = useState<MetricSnapshotPoint[]>([]);
@@ -65,6 +74,13 @@ export function MonitoringSection({ repoId }: { repoId: number }) {
     date: shortDate(s.captured_at),
     health: s.health_score,
   }));
+  const latest = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
+
+  function healthColor(score: number): string {
+    if (score >= 80) return "text-success";
+    if (score >= 50) return "text-warning";
+    return "text-danger";
+  }
 
   return (
     <Card className="mt-4">
@@ -116,17 +132,39 @@ export function MonitoringSection({ repoId }: { repoId: number }) {
         )}
         {loading ? (
           <Skeleton className="h-52 w-full" />
-        ) : chartData.length < 2 ? (
+        ) : chartData.length >= 2 ? (
+          <HealthTrend data={chartData} />
+        ) : latest ? (
+          <div>
+            <div className="flex items-end gap-6">
+              <div>
+                <div className={`text-4xl font-semibold tabular-nums ${healthColor(latest.health_score)}`}>
+                  {latest.health_score}
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Health score
+                </div>
+              </div>
+              <div className="grid flex-1 grid-cols-3 gap-2 text-xs">
+                <Stat label="Coverage" value={`${Math.round(latest.doc_coverage_pct)}%`} />
+                <Stat label="Critical hotspots" value={latest.critical_hotspots} />
+                <Stat label="Single-owner" value={latest.single_owner_modules} />
+              </div>
+            </div>
+            <p className="mt-4 text-xs text-muted-foreground">
+              First snapshot recorded. The trend line appears once there are two or more —
+              captured automatically on each history ingest and daily, or hit “Capture now” again.
+            </p>
+          </div>
+        ) : (
           <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
-            <span>Not enough history to chart a trend yet.</span>
+            <span>No snapshots yet.</span>
             <span className="text-xs">
-              Snapshots are captured on ingestion and daily — or hit “Capture now”. Two are needed
-              to plot.
+              Snapshots are captured on ingestion and daily — or hit “Capture now” to record the
+              first.
             </span>
             {alerts.length === 0 && <Badge tone="outline">No alerts</Badge>}
           </div>
-        ) : (
-          <HealthTrend data={chartData} />
         )}
       </CardContent>
     </Card>
