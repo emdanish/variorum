@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import re
 from dataclasses import dataclass
 
@@ -8,14 +7,16 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.ai.embeddings import EmbeddingService
+from app.ai.rag import top_k_by_cosine
 from app.ai.service import AIService
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models import KnowledgeEntry
+from app.models import DecisionEntry, KnowledgeEntry
 
 logger = get_logger("variorum.qa")
 
 MAX_ENTRIES = 8
+MAX_DECISIONS = 3  # synthesized decisions blended in alongside raw history
 MAX_BODY_CHARS = 600
 MIN_SIMILARITY = 0.4  # cosine floor to exclude clearly-unrelated vector hits
 
@@ -55,7 +56,8 @@ def pgvector_active(db: Session) -> bool:
 
 SYSTEM_PROMPT = (
     "You are Variorum's engineering-memory assistant. Answer the question using "
-    "ONLY the numbered context entries below (commits, pull requests, issues). "
+    "ONLY the numbered context entries below (commits, pull requests, issues, and "
+    "synthesized engineering decisions). "
     "Rules:\n"
     "- Base every statement on the provided context; never invent facts, APIs, or "
     "history.\n"
@@ -67,26 +69,37 @@ SYSTEM_PROMPT = (
 
 
 @dataclass
+class Cited:
+    """A source the answer drew on — knowledge entry or synthesized decision."""
+
+    kind: str
+    source_ref: str
+    title: str | None = None
+    url: str | None = None
+
+
+@dataclass
+class _ContextDoc:
+    """Uniform view of a retrievable source, so knowledge and decisions share one
+    numbered-context format and one citation-mapping path."""
+
+    kind: str
+    source_ref: str
+    title: str | None
+    url: str | None
+    body: str | None
+
+
+@dataclass
 class QAResult:
     answer: str
-    cited_entries: list[KnowledgeEntry]
+    cited_entries: list[Cited]
     provider: str | None
     model: str | None
 
 
 def _haystack():
     return func.coalesce(KnowledgeEntry.title, "") + " " + func.coalesce(KnowledgeEntry.body, "")
-
-
-def _cosine(a: list[float], b: list[float]) -> float:
-    if not a or not b or len(a) != len(b):
-        return 0.0
-    dot = sum(x * y for x, y in zip(a, b, strict=False))
-    na = math.sqrt(sum(x * x for x in a))
-    nb = math.sqrt(sum(y * y for y in b))
-    if na == 0 or nb == 0:
-        return 0.0
-    return dot / (na * nb)
 
 
 def _merge(
@@ -146,9 +159,9 @@ def _vector_retrieve_inprocess(
         .scalars()
         .all()
     )
-    scored = [(_cosine(query_vec, e.embedding or []), e) for e in embedded]
-    ranked = sorted(scored, key=lambda s: s[0], reverse=True)
-    return [e for score, e in ranked if score >= MIN_SIMILARITY][:k]
+    return top_k_by_cosine(
+        query_vec, embedded, lambda e: e.embedding, k=k, min_similarity=MIN_SIMILARITY
+    )
 
 
 def _vector_literal(vec: list[float]) -> str:
@@ -217,21 +230,129 @@ def _keyword_retrieve(
     )
 
 
-def _format_context(entries: list[KnowledgeEntry]) -> str:
+def _decision_haystack():
+    return func.coalesce(DecisionEntry.title, "") + " " + func.coalesce(DecisionEntry.summary, "")
+
+
+def _decision_keyword_retrieve(
+    db: Session, repository_id: int, question: str, k: int
+) -> list[DecisionEntry]:
+    """Full-text over decision title+summary, ranked by relevance then recency,
+    with an ILIKE fallback (mirrors ``_keyword_retrieve``) so partially-stemming
+    phrasings like 'jwt authentication' still surface a 'JWT auth' decision."""
+    haystack = _decision_haystack()
+    tsv = func.to_tsvector("english", haystack)
+    tsq = func.websearch_to_tsquery("english", question)
+    rows = (
+        db.execute(
+            select(DecisionEntry)
+            .where(DecisionEntry.repository_id == repository_id, tsv.op("@@")(tsq))
+            .order_by(func.ts_rank(tsv, tsq).desc(), DecisionEntry.decided_at.desc().nullslast())
+            .limit(k)
+        )
+        .scalars()
+        .all()
+    )
+    if rows:
+        return list(rows)
+
+    words = re.findall(r"[A-Za-z0-9_]{3,}", question)[:6]
+    if not words:
+        return []
+    clauses = [haystack.ilike(f"%{w}%") for w in words]
+    return list(
+        db.execute(
+            select(DecisionEntry)
+            .where(DecisionEntry.repository_id == repository_id, or_(*clauses))
+            .order_by(DecisionEntry.decided_at.desc().nullslast())
+            .limit(k)
+        )
+        .scalars()
+        .all()
+    )
+
+
+def retrieve_decisions(
+    db: Session,
+    repository_id: int,
+    question: str,
+    *,
+    k: int = MAX_DECISIONS,
+    embedder: EmbeddingService | None = None,
+) -> list[DecisionEntry]:
+    """Retrieve synthesized decisions relevant to a question — semantic (embedding
+    cosine) blended with keyword search, keyword-only when embeddings are
+    unavailable. Decisions are few per repo, so this always uses the in-process
+    cosine path (no pgvector mirror)."""
+    keyword_hits = _decision_keyword_retrieve(db, repository_id, question, k)
+    if embedder is None or not embedder.available:
+        return keyword_hits
+    query_vec = embedder.embed(question)
+    if not query_vec:
+        return keyword_hits
+
+    embedded = (
+        db.execute(
+            select(DecisionEntry).where(
+                DecisionEntry.repository_id == repository_id,
+                DecisionEntry.embedding.is_not(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    vector_hits = top_k_by_cosine(
+        query_vec, embedded, lambda d: d.embedding, k=k, min_similarity=MIN_SIMILARITY
+    )
+    seen: set[int] = set()
+    out: list[DecisionEntry] = []
+    for d in [*vector_hits, *keyword_hits]:
+        if d.id in seen:
+            continue
+        seen.add(d.id)
+        out.append(d)
+        if len(out) >= k:
+            break
+    return out
+
+
+def _entry_to_doc(e: KnowledgeEntry) -> _ContextDoc:
+    return _ContextDoc(
+        kind=e.kind.value, source_ref=e.source_ref, title=e.title, url=e.url, body=e.body
+    )
+
+
+def _decision_to_doc(d: DecisionEntry) -> _ContextDoc:
+    return _ContextDoc(
+        kind="decision", source_ref=f"DEC-{d.id}", title=d.title, url=None, body=d.summary
+    )
+
+
+def _format_context(docs: list[_ContextDoc]) -> str:
     blocks = []
-    for i, e in enumerate(entries, start=1):
-        body = (e.body or "").strip()
+    for i, d in enumerate(docs, start=1):
+        body = (d.body or "").strip()
         if len(body) > MAX_BODY_CHARS:
             body = body[:MAX_BODY_CHARS] + " …"
-        ref = f"{e.kind.value} {e.source_ref}"
-        blocks.append(f"[{i}] {ref} — {e.title or ''}\n{body}\n(source: {e.url or 'n/a'})")
+        blocks.append(
+            f"[{i}] {d.kind} {d.source_ref} — {d.title or ''}\n{body}\n(source: {d.url or 'n/a'})"
+        )
     return "\n\n".join(blocks)
 
 
 async def answer_question(
-    ai: AIService, question: str, entries: list[KnowledgeEntry]
+    ai: AIService,
+    question: str,
+    entries: list[KnowledgeEntry],
+    decisions: list[DecisionEntry] | None = None,
 ) -> QAResult:
-    if not entries:
+    """Answer grounded in retrieved context. Blends synthesized decisions with raw
+    history entries when provided (decisions default to none, so existing
+    history-only callers are unchanged)."""
+    docs = [_entry_to_doc(e) for e in entries] + [
+        _decision_to_doc(d) for d in (decisions or [])
+    ]
+    if not docs:
         return QAResult(
             answer=(
                 "I don't have enough indexed history to answer that yet. "
@@ -242,15 +363,23 @@ async def answer_question(
             model=None,
         )
 
-    prompt = f"Question: {question}\n\nContext:\n{_format_context(entries)}"
+    prompt = f"Question: {question}\n\nContext:\n{_format_context(docs)}"
     data, result = await ai.complete_structured(
         prompt, system=SYSTEM_PROMPT, purpose="engineering_qa"
     )
     answer = str(data.get("answer", "")).strip()
     cited_idx = {
-        n for n in (data.get("cited") or []) if isinstance(n, int) and 1 <= n <= len(entries)
+        n for n in (data.get("cited") or []) if isinstance(n, int) and 1 <= n <= len(docs)
     }
-    cited = [entries[n - 1] for n in sorted(cited_idx)]
+    cited = [
+        Cited(
+            kind=docs[n - 1].kind,
+            source_ref=docs[n - 1].source_ref,
+            title=docs[n - 1].title,
+            url=docs[n - 1].url,
+        )
+        for n in sorted(cited_idx)
+    ]
     return QAResult(
         answer=answer or "I don't have enough information to answer that.",
         cited_entries=cited,

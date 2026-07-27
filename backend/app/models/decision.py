@@ -28,3 +28,8 @@ class DecisionEntry(Base, TimestampMixin):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     provider: Mapped[str | None] = mapped_column(String(64))
     model: Mapped[str | None] = mapped_column(String(128))
+    # Semantic-search embedding of title + summary, stored as a JSON array of
+    # floats (same convention as KnowledgeEntry.embedding). Lets the Q&A retrieve
+    # synthesized decisions, not just raw history. Decisions are few per repo, so
+    # in-process cosine over JSONB is ample; no pgvector mirror is needed here.
+    embedding: Mapped[list[float] | None] = mapped_column(JSONB)

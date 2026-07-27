@@ -870,6 +870,42 @@ the AI free-tier fallback add no cost).
 
 ---
 
+## Knowledge retrieval — embeddings & RAG foundation (complete)
+
+Embeddings + RAG were already in place from Phase 2 (Gemini `gemini-embedding-001`
+768-dim with dual-key fallback; JSONB vector storage plus a guarded, HNSW-indexed,
+trigger-synced **pgvector** acceleration path; hybrid semantic ⊕ keyword retrieval
+→ cited LLM answers; `embed_missing` backfill). Rather than rebuild a working
+system, this pass **extended the foundation** so it's reusable and covers the
+highest-signal "why" source.
+
+- **Reusable RAG core (`ai/rag.py`):** extracted `cosine` and a generic
+  `top_k_by_cosine(query_vec, items, get_vec, k, min_similarity)` — the shared
+  in-process semantic-ranking primitive any embedded content type can use.
+  `services/qa.py` now ranks through it (behaviour-preserving for history).
+- **Decisions are now embedded and retrievable:** `DecisionEntry.embedding` JSONB
+  column (migration `c4f9a2e17b83`); embeddings computed when a decision timeline
+  is synthesized, with an `embed_missing_decisions` backfill. Decisions are few
+  per repo, so JSONB + in-process cosine is used (no pgvector mirror needed).
+- **Q&A blends both corpora:** `retrieve_decisions()` (semantic + keyword, with an
+  ILIKE fallback) runs alongside history retrieval, and `answer_question` folds
+  synthesized decisions into the same numbered, cited context (decisions default
+  to none, so the existing history-only path is unchanged). Citations carry a
+  `decision` kind. The Ask endpoint wires both.
+- **Deliberate non-goals:** `Document` stores no body text (only path/title/hash),
+  so embedding docs would be low-signal; code symbols (~900/repo) are high-volume
+  and weak for "why" questions. Both stay on keyword search via unified search —
+  a conscious scope decision, not an omission.
+
+Verified live: all 8 of the demo repo's decisions embedded via the real Gemini
+endpoint, and a semantic query ("why was the AI provider layer designed this
+way") correctly surfaced the AI-provider-fallback decision as the top hit.
+
+**Status:** 216 backend tests (+10), mypy + ruff clean. `alembic upgrade head`
+still succeeds with or without pgvector.
+
+---
+
 ## Environment, skills & tooling
 
 **Permanent memory:** [`CLAUDE.md`](./CLAUDE.md) is the entry point for every

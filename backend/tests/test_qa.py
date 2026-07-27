@@ -1,8 +1,15 @@
 from __future__ import annotations
 
-from app.models import GitHubInstallation, KnowledgeEntry, KnowledgeKind, Repository, User
+from app.models import (
+    DecisionEntry,
+    GitHubInstallation,
+    KnowledgeEntry,
+    KnowledgeKind,
+    Repository,
+    User,
+)
 from app.services.knowledge import embed_missing
-from app.services.qa import answer_question, retrieve
+from app.services.qa import answer_question, retrieve, retrieve_decisions
 from tests._fakes import FakeAI
 from tests.conftest import requires_db
 
@@ -166,3 +173,89 @@ def test_ask_503_without_ai(authed_client, db_session, monkeypatch):
     )
     resp = api_client.post(f"/api/v1/repositories/{repo.id}/ask", json={"question": "why?"})
     assert resp.status_code == 503
+
+
+# --------------------------------------------------------------------------- #
+# Decisions in retrieval (embeddings foundation extended to synthesized decisions)
+# --------------------------------------------------------------------------- #
+
+
+def test_retrieve_decisions_keyword(db_session):
+    repo = _seed(db_session)
+    db_session.add(
+        DecisionEntry(
+            repository_id=repo.id, title="Adopt JWT auth",
+            summary="Replaced sessions with JWT for stateless auth.", sources=[],
+        )
+    )
+    db_session.flush()
+    hits = retrieve_decisions(db_session, repo.id, "why jwt authentication")
+    assert hits and hits[0].title == "Adopt JWT auth"
+
+
+def test_retrieve_decisions_semantic_without_keywords(db_session):
+    repo = _seed(db_session)
+    d1 = DecisionEntry(
+        repository_id=repo.id, title="alpha", summary="alpha", sources=[],
+        embedding=[1.0, 0.0, 0.0],
+    )
+    d2 = DecisionEntry(
+        repository_id=repo.id, title="beta", summary="beta", sources=[],
+        embedding=[0.0, 1.0, 0.0],
+    )
+    db_session.add_all([d1, d2])
+    db_session.flush()
+    embedder = FakeEmbedder(query_vec=[0.95, 0.05, 0.0])
+    hits = retrieve_decisions(db_session, repo.id, "zzz-nonmatching", embedder=embedder)
+    assert hits and hits[0].title == "alpha"
+
+
+async def test_answer_question_blends_and_cites_decision(db_session):
+    repo = _seed(db_session)
+    entries = retrieve(db_session, repo.id, "redis")  # 1 knowledge entry (PR 182)
+    decision = DecisionEntry(
+        repository_id=repo.id, title="Introduce Redis queues",
+        summary="Async work moved off the request path.", sources=[],
+    )
+    db_session.add(decision)
+    db_session.flush()
+    # docs = [PR 182, decision]; the model cites the decision (index 2).
+    ai = FakeAI({"answer": "Per the recorded decision, Redis queues were adopted.", "cited": [2]})
+    result = await answer_question(ai, "why redis?", entries, decisions=[decision])
+    assert result.cited_entries
+    cite = result.cited_entries[0]
+    assert cite.kind == "decision"
+    assert cite.source_ref == f"DEC-{decision.id}"
+
+
+def test_ask_endpoint_can_cite_a_decision(authed_client, db_session, monkeypatch):
+    api_client, user = authed_client
+    # Fresh repo with a decision but no knowledge entries → context is decision-only.
+    inst = GitHubInstallation(
+        installation_id=8650, account_login="acme", account_type="User", owner_user_id=user.id
+    )
+    db_session.add(inst)
+    db_session.flush()
+    repo = Repository(
+        installation_id=inst.id, github_repo_id=8651, full_name="acme/dec", default_branch="main"
+    )
+    db_session.add(repo)
+    db_session.flush()
+    db_session.add(
+        DecisionEntry(
+            repository_id=repo.id, title="Adopt JWT auth",
+            summary="Stateless auth via JWT tokens.", sources=[],
+        )
+    )
+    db_session.flush()
+    monkeypatch.setattr(
+        "app.api.routes.repositories.get_ai_service",
+        lambda: FakeAI({"answer": "JWT was adopted for stateless auth.", "cited": [1]}),
+    )
+    resp = api_client.post(
+        f"/api/v1/repositories/{repo.id}/ask", json={"question": "why jwt auth?"}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["citations"]
+    assert body["citations"][0]["kind"] == "decision"

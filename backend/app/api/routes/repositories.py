@@ -68,7 +68,7 @@ from app.services import pr_impact as pr_impact_svc
 from app.services import search as search_svc
 from app.services import slack as slack_svc
 from app.services.github.client import GitHubClient
-from app.services.qa import answer_question, retrieve
+from app.services.qa import answer_question, retrieve, retrieve_decisions
 from app.workers.indexing import run_index_job
 from app.workers.ingest import run_ingest_history_job
 from app.workers.pr_analysis import run_pr_analysis_job
@@ -450,7 +450,10 @@ async def generate_decisions(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="AI generation is unavailable right now. Please try again.",
         ) from exc
-    decisions_svc.replace_decisions(db, repo.id, decisions, provider=provider, model=model)
+    decisions_svc.replace_decisions(
+        db, repo.id, decisions, provider=provider, model=model,
+        embedder=get_embedding_service(),
+    )
     return [_decision_to_response(d) for d in decisions_svc.list_decisions(db, repo.id)]
 
 
@@ -657,9 +660,11 @@ async def ask(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No AI provider configured"
         )
 
-    entries = retrieve(db, repo.id, question, embedder=get_embedding_service())
+    embedder = get_embedding_service()
+    entries = retrieve(db, repo.id, question, embedder=embedder)
+    decisions = retrieve_decisions(db, repo.id, question, embedder=embedder)
     try:
-        result = await answer_question(ai, question, entries)
+        result = await answer_question(ai, question, entries, decisions=decisions)
     except (AllProvidersFailedError, ValueError) as exc:
         logger.warning("ask AI request failed repo=%s: %s", repo.id, exc)
         raise HTTPException(
@@ -670,8 +675,8 @@ async def ask(
     return AskResponse(
         answer=result.answer,
         citations=[
-            Citation(kind=e.kind.value, source_ref=e.source_ref, title=e.title, url=e.url)
-            for e in result.cited_entries
+            Citation(kind=c.kind, source_ref=c.source_ref, title=c.title, url=c.url)
+            for c in result.cited_entries
         ],
         provider=result.provider,
         model=result.model,

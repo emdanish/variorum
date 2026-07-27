@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai.embeddings import EmbeddingService
 from app.ai.service import AIService
 from app.models import DecisionEntry, KnowledgeEntry, KnowledgeKind
 
@@ -96,6 +97,10 @@ async def generate_decisions(
     return _parse(data, entries), result.provider, result.model
 
 
+def _embedding_text(title: str, summary: str) -> str:
+    return f"{title}\n\n{summary}".strip()
+
+
 def replace_decisions(
     db: Session,
     repository_id: int,
@@ -103,23 +108,65 @@ def replace_decisions(
     *,
     provider: str | None,
     model: str | None,
+    embedder: EmbeddingService | None = None,
 ) -> int:
-    """Replace the repository's decision timeline with a freshly synthesized set."""
+    """Replace the repository's decision timeline with a freshly synthesized set.
+
+    When an embedder is supplied and available, embeddings are computed for the
+    new rows so decisions are immediately retrievable in the Q&A. Embedding is
+    best-effort — a failure leaves ``embedding`` NULL and never blocks the write
+    (``embed_missing_decisions`` can backfill later)."""
     db.query(DecisionEntry).filter(DecisionEntry.repository_id == repository_id).delete()
-    for d in decisions:
-        db.add(
-            DecisionEntry(
-                repository_id=repository_id,
-                title=d["title"],
-                summary=d["summary"],
-                sources=d["sources"],
-                decided_at=d["decided_at"],
-                provider=provider,
-                model=model,
+    rows = [
+        DecisionEntry(
+            repository_id=repository_id,
+            title=d["title"],
+            summary=d["summary"],
+            sources=d["sources"],
+            decided_at=d["decided_at"],
+            provider=provider,
+            model=model,
+        )
+        for d in decisions
+    ]
+    db.add_all(rows)
+    if rows and embedder is not None and embedder.available:
+        vectors = embedder.embed_batch([_embedding_text(r.title, r.summary) for r in rows])
+        if vectors and len(vectors) == len(rows):
+            for row, vector in zip(rows, vectors, strict=False):
+                row.embedding = vector
+    db.commit()
+    return len(rows)
+
+
+def embed_missing_decisions(
+    db: Session, repository_id: int, embedder: EmbeddingService
+) -> int:
+    """Compute and store embeddings for decisions that lack one. Returns the
+    number embedded (0 if embeddings are unavailable). Mirror of
+    ``knowledge.embed_missing`` — a safety net for rows written without an
+    embedder (older data, or a transient embedding outage)."""
+    if not embedder.available:
+        return 0
+    rows = (
+        db.execute(
+            select(DecisionEntry).where(
+                DecisionEntry.repository_id == repository_id,
+                DecisionEntry.embedding.is_(None),
             )
         )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return 0
+    vectors = embedder.embed_batch([_embedding_text(r.title, r.summary) for r in rows])
+    if not vectors or len(vectors) != len(rows):
+        return 0
+    for row, vector in zip(rows, vectors, strict=False):
+        row.embedding = vector
     db.commit()
-    return len(decisions)
+    return len(rows)
 
 
 def list_decisions(db: Session, repository_id: int) -> list[DecisionEntry]:
