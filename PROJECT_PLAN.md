@@ -1100,6 +1100,26 @@ safely" vision is fully delivered (Tiers 1–3).
 
 ---
 
+## Final frontend polish (complete)
+
+A product-presentation pass once the feature set had evolved well past the
+original landing story:
+
+- **Landing page rebuilt around the current product.** New narrative — hero
+  ("Understand any codebase. Change it without breaking things."), a trust bar
+  (cited · human-in-the-loop · no new tool · free), a sharper problem framing,
+  and three alternating **capability stories** with realistic visuals (Ask the
+  codebase, Plan a change, On the pull request), a refreshed feature grid
+  (docs/testing intelligence, digests & alerts, portfolio & expertise), and a
+  "not another coding agent" differentiator. Feature-storytelling framing (what
+  it replaces / why you care), reusing existing tokens + `FadeIn` — no new deps.
+- **Dead-code cleanup** (audited): removed the unused `ui/separator.tsx`, the
+  unused `Appear` motion helper, and the unused `deleteDigestSchedule` API method.
+- Verified: `tsc` + `next lint` clean, production build passes (13 routes), landing
+  renders correctly. Backend untouched (267 tests still green).
+
+---
+
 ## Environment, skills & tooling
 
 **Permanent memory:** [`CLAUDE.md`](./CLAUDE.md) is the entry point for every

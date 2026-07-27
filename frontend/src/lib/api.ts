@@ -554,8 +554,6 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ day_of_week: dayOfWeek, hour, enabled }),
     }),
-  deleteDigestSchedule: (id: number) =>
-    request<void>(`/api/v1/repositories/${id}/digest/schedule`, { method: "DELETE" }),
   trends: (id: number) => request<TrendsReport>(`/api/v1/repositories/${id}/trends`),
   captureSnapshot: (id: number) =>
     request<{ captured: boolean; new_alerts: number }>(
