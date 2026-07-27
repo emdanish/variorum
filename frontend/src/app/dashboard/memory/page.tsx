@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { api, type AskResponse, type Citation, type KnowledgeStats } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = [
   "How does documentation drift detection work?",
@@ -51,19 +52,30 @@ function sourceText(c: Citation): string {
 function SourceChip({ c }: { c: Citation }) {
   const meta = KIND_META[c.kind] ?? { icon: Database, label: c.kind };
   const Icon = meta.icon;
+  // Code/commit/PR/issue refs are short identifiers or long paths where the
+  // click-through matters more than the tail — truncate those. A decision's
+  // value is its title, so let it wrap and show in full.
+  const isCode = c.kind === "code";
   const inner = (
     <span
-      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs transition-colors hover:border-primary/40 hover:bg-accent"
+      className="inline-flex max-w-full items-start gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs transition-colors hover:border-primary/40 hover:bg-accent"
       title={c.title ? `${meta.label}: ${c.title}` : meta.label}
     >
-      <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
-      <span className="font-medium text-muted-foreground">{meta.label}</span>
-      <span className="max-w-[220px] truncate font-mono text-foreground">{sourceText(c)}</span>
-      {c.url && <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />}
+      <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+      <span className="mt-px shrink-0 font-medium text-muted-foreground">{meta.label}</span>
+      <span
+        className={cn(
+          "text-foreground",
+          isCode ? "max-w-[240px] truncate font-mono" : "break-words",
+        )}
+      >
+        {sourceText(c)}
+      </span>
+      {c.url && <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />}
     </span>
   );
   return c.url ? (
-    <a href={c.url} target="_blank" rel="noreferrer">
+    <a href={c.url} target="_blank" rel="noreferrer" className="max-w-full">
       {inner}
     </a>
   ) : (
