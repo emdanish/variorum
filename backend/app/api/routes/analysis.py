@@ -254,6 +254,8 @@ async def generate_tests(
     db: Session = Depends(get_db),
 ) -> GeneratedPRResponse:
     finding = _owned_risk_finding(db, user.id, finding_id)
+    if finding.status == "dismissed":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Finding is dismissed")
     ai = get_ai_service()
     if not ai.available:
         raise HTTPException(

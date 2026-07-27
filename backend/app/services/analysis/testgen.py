@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.ai.providers._common import strip_json_fence
+from app.ai.providers._common import unwrap_sole_code_fence
 from app.ai.service import AIService
 
 SOURCE_MAX_CHARS = 12000
@@ -50,4 +50,4 @@ async def generate_test_file(
     result = await ai.complete(
         prompt, system=SYSTEM_PROMPT, temperature=0.1, purpose="test_gen"
     )
-    return strip_json_fence(result.text)
+    return unwrap_sole_code_fence(result.text)

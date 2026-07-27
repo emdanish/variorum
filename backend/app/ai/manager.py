@@ -5,8 +5,10 @@ from app.ai.base import (
     AllProvidersFailedError,
     CompletionResult,
     Message,
+    ProviderBadRequestError,
     ProviderError,
 )
+from app.ai.providers._common import parse_json_object
 from app.core.logging import get_logger
 
 logger = get_logger("variorum.ai")
@@ -48,6 +50,11 @@ class ProviderManager:
                     max_tokens=max_tokens,
                     json_mode=json_mode,
                 )
+                # In JSON mode, a 200 response that isn't valid JSON is a failed
+                # answer — treat it as a provider failure so the next provider
+                # gets a chance, instead of surfacing a parse error to the caller.
+                if json_mode:
+                    parse_json_object(result.text)
                 logger.info(
                     "ai call ok provider=%s model=%s purpose=%s latency_ms=%s",
                     provider.name,
@@ -56,6 +63,14 @@ class ProviderManager:
                     result.latency_ms,
                 )
                 return result
+            except ValueError as exc:
+                logger.warning(
+                    "ai provider returned unparseable JSON provider=%s purpose=%s falling back: %s",
+                    provider.name,
+                    purpose,
+                    exc,
+                )
+                errors.append(ProviderBadRequestError(provider.name, f"unparseable JSON: {exc}"))
             except ProviderError as exc:
                 logger.warning(
                     "ai provider failed provider=%s kind=%s purpose=%s falling back: %s",

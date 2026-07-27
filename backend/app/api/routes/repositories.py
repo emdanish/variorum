@@ -859,10 +859,13 @@ async def ask(
         )
 
     embedder = get_embedding_service()
-    entries = retrieve(db, repo.id, question, embedder=embedder)
-    decisions = retrieve_decisions(db, repo.id, question, embedder=embedder)
-    code = retrieve_code(db, repo.id, question, embedder=embedder)
-    documents = retrieve_docs(db, repo.id, question, embedder=embedder)
+    # Embed the question once and reuse it across all four retrievers (instead of
+    # one embedding call per retriever).
+    query_vec = embedder.embed(question) if embedder.available else None
+    entries = retrieve(db, repo.id, question, embedder=embedder, query_vec=query_vec)
+    decisions = retrieve_decisions(db, repo.id, question, embedder=embedder, query_vec=query_vec)
+    code = retrieve_code(db, repo.id, question, embedder=embedder, query_vec=query_vec)
+    documents = retrieve_docs(db, repo.id, question, embedder=embedder, query_vec=query_vec)
     try:
         result = await answer_question(
             ai,

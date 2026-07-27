@@ -16,7 +16,19 @@ _BUCKET_LIMITS: dict[str, tuple[int, float]] = {
     "webhook": (120, 60.0),
 }
 
-_AI_SUFFIXES = ("/ask", "/open-pr", "/generate-tests")
+# Endpoints that trigger AI generation or a GitHub fan-out — all expensive and
+# worth abuse-protecting, not just the original three.
+_AI_SUFFIXES = (
+    "/ask",
+    "/open-pr",
+    "/generate-tests",
+    "/orientation",
+    "/decisions",
+    "/change-briefing",
+    "/analyze-pr",
+    "/analyze-risk",
+)
+_AI_SUBSTRINGS = ("/contradictions/", "/pr-briefing/", "/pr-comment")
 
 
 def classify(path: str) -> str | None:
@@ -25,7 +37,7 @@ def classify(path: str) -> str | None:
         return "auth"
     if path == "/webhooks/github":
         return "webhook"
-    if path.endswith(_AI_SUFFIXES):
+    if path.endswith(_AI_SUFFIXES) or any(sub in path for sub in _AI_SUBSTRINGS):
         return "ai"
     return None
 

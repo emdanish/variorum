@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import json
 from functools import lru_cache
 from typing import Any
 
 from app.ai.base import CompletionResult, Message
 from app.ai.manager import ProviderManager
-from app.ai.providers._common import strip_json_fence
+from app.ai.providers._common import parse_json_object
 from app.ai.providers.gemini import GeminiProvider
 from app.ai.providers.openai_compatible import DeepSeekProvider, PerplexityProvider
 from app.core.config import Settings, get_settings
@@ -69,7 +68,9 @@ class AIService:
             json_mode=True,
             purpose=purpose,
         )
-        return json.loads(strip_json_fence(result.text)), result
+        # The manager already validated parseability in json_mode, so this
+        # succeeds; parse_json_object also recovers prose-wrapped JSON.
+        return parse_json_object(result.text), result
 
 
 def build_provider_manager(settings: Settings) -> ProviderManager:

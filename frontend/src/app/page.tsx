@@ -13,6 +13,7 @@ import {
   GitPullRequest,
   Lightbulb,
   ShieldCheck,
+  Slack,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -33,6 +34,7 @@ export default function HomePage() {
         <TrustBar />
         <Problem />
         <CoreCapabilities />
+        <SlackSection />
         <Features />
         <HowItWorks />
         <Differentiator />
@@ -192,12 +194,94 @@ function CoreCapabilities() {
           points={[
             "Every PR gets an impact briefing — hotspots, owners, and missing tests — as one sticky comment.",
             "Documentation drift and test gaps come back as reviewable PRs. Variorum proposes; you merge.",
-            "Weekly digests and health alerts reach you in Slack, so nothing quietly rots.",
+            "The comment updates in place as you push, so it's never a stale wall of duplicates.",
           ]}
           visual={<PrVisual />}
         />
       </div>
     </section>
+  );
+}
+
+// --------------------------------------------------------------------------- //
+// Slack — insights are delivered, not dashboards you must remember to open
+// --------------------------------------------------------------------------- //
+
+function SlackSection() {
+  return (
+    <section id="slack" className="border-t border-border/60 py-24">
+      <div className="mx-auto grid max-w-6xl items-center gap-12 px-6 lg:grid-cols-2">
+        <FadeIn>
+          <p className="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-primary">
+            <Slack className="h-4 w-4" /> Meets you in Slack
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+            The most reliable dashboard is the one you never have to open
+          </h2>
+          <p className="mt-4 text-muted-foreground">
+            Health only helps if someone looks. Variorum sends a weekly recap and the alerts that
+            can&apos;t wait to the channel your team already lives in — so a health drop or a new
+            critical hotspot reaches you the day it happens, not the week you next remember to check.
+          </p>
+          <ul className="mt-6 space-y-3">
+            {[
+              "A weekly digest — health, new drift and risk, top hotspots — on the day and time you pick.",
+              "Connect once with an incoming webhook; set the cadence per repository.",
+              "Send any repository's digest to Slack on demand, straight from the dashboard.",
+            ].map((p) => (
+              <li key={p} className="flex items-start gap-3 text-sm">
+                <span className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-primary/15 text-primary">
+                  <Check className="h-3 w-3" />
+                </span>
+                <span className="text-foreground/90">{p}</span>
+              </li>
+            ))}
+          </ul>
+        </FadeIn>
+        <FadeIn delay={0.1}>
+          <SlackVisual />
+        </FadeIn>
+      </div>
+    </section>
+  );
+}
+
+function SlackVisual() {
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xl shadow-black/30">
+      <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
+        <span className="font-semibold text-foreground">#</span> engineering
+      </div>
+      <div className="flex gap-3 p-4">
+        <span className="flex h-9 w-9 flex-none items-center justify-center rounded-md bg-primary/15 text-sm font-bold text-primary">
+          V
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-semibold text-foreground">Variorum</span>
+            <span className="rounded bg-muted px-1 py-0.5 text-[9px] font-medium uppercase text-muted-foreground">
+              App
+            </span>
+            <span className="text-xs text-muted-foreground">9:00 AM</span>
+          </div>
+          <p className="mt-1 text-sm text-foreground">
+            🟡 <span className="font-semibold">acme/payments</span> — health 61/100, last 7 days
+          </p>
+          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+            <p>• 2 new doc-drift · 1 new test-risk · 3 knowledge added · 2 single-owner modules</p>
+            <p className="font-medium text-foreground/80">Top hotspots</p>
+            <p>
+              <span className="text-danger">•</span>{" "}
+              <span className="font-mono">src/exports.py</span> (90)
+            </p>
+            <p>
+              <span className="text-warning">•</span>{" "}
+              <span className="font-mono">src/billing.py</span> (72)
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -462,7 +546,7 @@ const FOOTER_SECTIONS = [
     title: "Product",
     links: [
       { label: "Capabilities", href: "/#capabilities" },
-      { label: "How it works", href: "/#how" },
+      { label: "Slack", href: "/#slack" },
       { label: "Features", href: "/#features" },
       { label: "Dashboard", href: "/dashboard" },
     ],

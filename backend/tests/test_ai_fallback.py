@@ -11,16 +11,25 @@ from app.ai.base import (
     ProviderQuotaError,
 )
 from app.ai.manager import ProviderManager
+from app.ai.providers._common import parse_json_object
 from app.ai.service import build_provider_manager
 from app.core.config import Settings
 
 
 class FakeProvider(AIProvider):
-    def __init__(self, name: str, *, configured: bool = True, error: Exception | None = None):
+    def __init__(
+        self,
+        name: str,
+        *,
+        configured: bool = True,
+        error: Exception | None = None,
+        text: str | None = None,
+    ):
         self.name = name
         self.model = f"{name}-model"
         self._configured = configured
         self._error = error
+        self._text = text
         self.calls = 0
 
     @property
@@ -31,7 +40,8 @@ class FakeProvider(AIProvider):
         self.calls += 1
         if self._error is not None:
             raise self._error
-        return CompletionResult(text=f"ok:{self.name}", provider=self.name, model=self.model)
+        text = self._text if self._text is not None else f"ok:{self.name}"
+        return CompletionResult(text=text, provider=self.name, model=self.model)
 
 
 MESSAGES = [Message(role="user", content="hi")]
@@ -111,3 +121,48 @@ def test_default_manager_only_activates_configured_providers():
     manager = build_provider_manager(settings)
 
     assert [p.name for p in manager.active_providers] == ["gemini-1", "perplexity"]
+
+
+# --------------------------------------------------------------------------- #
+# JSON-mode: a 200 with unparseable output must fall back to the next provider
+# --------------------------------------------------------------------------- #
+
+
+async def test_json_mode_falls_back_on_unparseable_output():
+    bad = FakeProvider("a", text="sorry, I can't do that")  # 200 but not JSON
+    good = FakeProvider("b", text='{"ok": true}')
+    manager = ProviderManager([bad, good])
+
+    result = await manager.complete(MESSAGES, json_mode=True)
+
+    assert result.provider == "b"
+    assert bad.calls == 1 and good.calls == 1
+
+
+async def test_json_mode_all_unparseable_raises_aggregate():
+    manager = ProviderManager([FakeProvider("a", text="nope"), FakeProvider("b", text="also no")])
+    with pytest.raises(AllProvidersFailedError) as exc:
+        await manager.complete(MESSAGES, json_mode=True)
+    assert len(exc.value.errors) == 2
+
+
+async def test_non_json_mode_accepts_any_text():
+    # The same non-JSON text is fine when json_mode is off (prose completion).
+    manager = ProviderManager([FakeProvider("a", text="just prose")])
+    result = await manager.complete(MESSAGES)
+    assert result.text == "just prose"
+
+
+def test_parse_json_object_recovers_fenced_and_wrapped():
+    assert parse_json_object('{"a": 1}') == {"a": 1}
+    assert parse_json_object('```json\n{"a": 1}\n```') == {"a": 1}
+    assert parse_json_object('Here is the result:\n```json\n{"a": 1}\n```\nHope that helps!') == {
+        "a": 1
+    }
+    assert parse_json_object('The answer is {"a": 1} per the data.') == {"a": 1}
+
+
+def test_parse_json_object_rejects_garbage_and_non_objects():
+    for bad in ["not json at all", "[1, 2, 3]", "42", ""]:
+        with pytest.raises(ValueError):
+            parse_json_object(bad)

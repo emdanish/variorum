@@ -7,6 +7,7 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.ai.embeddings import EmbeddingService
+from app.ai.providers._common import clean_prose
 from app.ai.rag import top_k_by_cosine
 from app.ai.service import AIService
 from app.core.config import get_settings
@@ -64,7 +65,10 @@ SYSTEM_PROMPT = (
     "Rules:\n"
     "- Base every statement on the provided context; never invent facts, APIs, or "
     "history.\n"
-    "- Cite the entries you used by their number.\n"
+    "- Cite the entries you used only in the `cited` array — never write inline "
+    "markers like [1] in the answer text.\n"
+    "- Write the answer as clear plain prose (1-4 short paragraphs). No headings, "
+    "no bullet lists, no bold/asterisks, no code fences.\n"
     "- If the context does not contain the answer, say you don't have enough "
     "information and cite nothing.\n"
     'Respond in strict JSON: {"answer": string, "cited": [int, ...]}'
@@ -127,6 +131,7 @@ def retrieve(
     *,
     k: int = MAX_ENTRIES,
     embedder: EmbeddingService | None = None,
+    query_vec: list[float] | None = None,
 ) -> list[KnowledgeEntry]:
     """Hybrid retrieval: semantic (embedding cosine) blended with keyword
     full-text search. Falls back to keyword-only when embeddings are
@@ -135,7 +140,8 @@ def retrieve(
     if embedder is None or not embedder.available:
         return keyword_hits
 
-    query_vec = embedder.embed(question)
+    if query_vec is None:
+        query_vec = embedder.embed(question)
     if not query_vec:
         return keyword_hits
 
@@ -282,6 +288,7 @@ def retrieve_decisions(
     *,
     k: int = MAX_DECISIONS,
     embedder: EmbeddingService | None = None,
+    query_vec: list[float] | None = None,
 ) -> list[DecisionEntry]:
     """Retrieve synthesized decisions relevant to a question — semantic (embedding
     cosine) blended with keyword search, keyword-only when embeddings are
@@ -290,7 +297,8 @@ def retrieve_decisions(
     keyword_hits = _decision_keyword_retrieve(db, repository_id, question, k)
     if embedder is None or not embedder.available:
         return keyword_hits
-    query_vec = embedder.embed(question)
+    if query_vec is None:
+        query_vec = embedder.embed(question)
     if not query_vec:
         return keyword_hits
 
@@ -326,6 +334,7 @@ def retrieve_code(
     *,
     k: int = MAX_CODE,
     embedder: EmbeddingService | None = None,
+    query_vec: list[float] | None = None,
 ) -> list[CodeSymbol]:
     """Retrieve code symbols relevant to a question — semantic (embedding cosine)
     blended with an identifier keyword match, keyword-only when embeddings are
@@ -352,7 +361,8 @@ def retrieve_code(
         )
     if embedder is None or not embedder.available:
         return keyword_hits[:k]
-    query_vec = embedder.embed(question)
+    if query_vec is None:
+        query_vec = embedder.embed(question)
     if not query_vec:
         return keyword_hits[:k]
 
@@ -389,6 +399,7 @@ def retrieve_docs(
     *,
     k: int = MAX_DOCS,
     embedder: EmbeddingService | None = None,
+    query_vec: list[float] | None = None,
 ) -> list[Document]:
     """Retrieve documentation relevant to a question — semantic (embedding cosine)
     blended with full-text over title+body, keyword-only when embeddings are
@@ -430,7 +441,8 @@ def retrieve_docs(
             )
     if embedder is None or not embedder.available:
         return keyword_hits
-    query_vec = embedder.embed(question)
+    if query_vec is None:
+        query_vec = embedder.embed(question)
     if not query_vec:
         return keyword_hits
 
@@ -556,7 +568,7 @@ async def answer_question(
     data, result = await ai.complete_structured(
         prompt, system=SYSTEM_PROMPT, purpose="engineering_qa"
     )
-    answer = str(data.get("answer", "")).strip()
+    answer = clean_prose(str(data.get("answer", "")))
     cited_idx = {
         n for n in (data.get("cited") or []) if isinstance(n, int) and 1 <= n <= len(docs)
     }

@@ -181,5 +181,10 @@ def test_dismiss_risk_suppresses_restore_lifts(authed_client, db_session):
     api_client.post(f"/api/v1/risk-findings/{rf.id}/dismiss").raise_for_status()
     assert svc.suppressed_targets(db_session, repo.id, svc.RISK) == {"src/pay.py"}
 
+    # A dismissed risk finding can't spawn a test-gen PR (parity with doc-fix).
+    assert (
+        api_client.post(f"/api/v1/risk-findings/{rf.id}/generate-tests").status_code == 409
+    )
+
     api_client.post(f"/api/v1/risk-findings/{rf.id}/restore").raise_for_status()
     assert svc.suppressed_targets(db_session, repo.id, svc.RISK) == set()

@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai.embeddings import EmbeddingService
+from app.ai.providers._common import clean_prose
 from app.ai.service import AIService
 from app.core.logging import get_logger
 from app.models import AnalysisJob, DocCodeLink, Document, RiskFinding
@@ -19,7 +20,8 @@ SYSTEM_PROMPT = (
     "change. Using ONLY the structured context provided, write a short briefing "
     "(2-4 sentences) on what they should know before they start and the biggest "
     "risk to watch. Be concrete and practical; name files/owners when relevant. "
-    "Do not invent facts. Plain prose, no preamble."
+    "Do not invent facts. Plain prose only — no preamble, no markdown, no bullet "
+    "points, no citation markers like [1]."
 )
 
 
@@ -47,8 +49,10 @@ def build_change_briefing(
     how risky it is to touch, who owns it, why it's built that way, which docs
     will drift, and where tests are missing. Deterministic over the DB — reliable
     without AI (the AI TL;DR is layered on separately)."""
+    # Embed the query once and share it across the retrievers below.
+    query_vec = embedder.embed(query) if embedder and embedder.available else None
     code_hits = qa_svc.retrieve_code(
-        db, repository_id, query, k=MAX_LOCATIONS, embedder=embedder
+        db, repository_id, query, k=MAX_LOCATIONS, embedder=embedder, query_vec=query_vec
     )
     target_paths = list(dict.fromkeys(s.path for s in code_hits))  # unique, order-preserving
 
@@ -184,5 +188,5 @@ async def summarize(ai: AIService, briefing: dict) -> tuple[str | None, str | No
     except Exception as exc:  # noqa: BLE001 — the TL;DR is optional
         logger.warning("change-briefing summary failed: %s", exc)
         return None, None
-    text = (result.text or "").strip()
+    text = clean_prose(result.text or "")
     return (text or None), (result.provider if text else None)

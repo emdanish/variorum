@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.ai.providers._common import strip_json_fence
+from app.ai.providers._common import unwrap_sole_code_fence
 from app.ai.service import AIService
 
 MAX_DOC_CHARS = 12000
@@ -39,4 +39,4 @@ async def generate_updated_document(
     result = await ai.complete(
         prompt, system=SYSTEM_PROMPT, temperature=0.1, purpose="doc_fix"
     )
-    return strip_json_fence(result.text)
+    return unwrap_sole_code_fence(result.text)
