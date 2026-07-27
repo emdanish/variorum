@@ -64,7 +64,7 @@ backend/app/
   db/                engine/session (pooled), declarative base
   models/            SQLAlchemy models + StrEnum enums (incl. RepositoryGuide, UsageCredit)
   schemas/           Pydantic request/response
-  api/routes/        auth, github, repositories, analysis, teams, system, webhooks
+  api/routes/        auth, github, repositories, analysis, teams, system, webhooks, usage, admin
   ai/                provider-agnostic AI layer (base, manager, providers/, service, embeddings, rag)
   services/
     github/          App auth, OAuth, REST client, webhook verify, events, installations
@@ -169,3 +169,4 @@ powershell -ExecutionPolicy Bypass -File scripts/start-all.ps1
 - Free-tier AI keys reject some model names (404) and rate-limit (429/503) — rely on the fallback chain; re-verify models with `check_ai.py`.
 - Don't import `test_*`-named functions into test modules (pytest collects them) — alias.
 - **AI credits** (`services/credits.py`, `UsageCredit` + `GlobalUsage`): the app is **public**, so all tenants share the free-tier AI keys. Two caps, both rolled lazily on read/spend (no scheduler): a **per-user** allotment (`USER_DAILY_CREDITS`, default 150, per `CREDIT_WINDOW_SECONDS` = 24h) and a **fleet-wide ceiling** (`GLOBAL_DAILY_CREDITS`, default 1000, single-row `global_usage`). Gate an AI endpoint with `Depends(require_credit)` (`api/deps.py`): 429 when the user is out, **503 when the global ceiling is hit** (capacity, logged at WARNING). Spend on success with `CreditGuard.commit()` — increments *both* meters; never charged on AI failure or idempotent reuse. `GET /usage` (per-user only) feeds the topbar pill + Overview card (refreshed via the `variorum:usage-changed` event). Only meter endpoints that truly call the AI (not pr-briefing/pr-comment).
+- **Admin fleet-usage view**: `ADMIN_GITHUB_LOGINS` (comma-separated, case-insensitive) + `settings.is_admin(login)` gate. `User.github_login` (migration `f2a9d5c8b1e4`, populated on OAuth upsert) is the admin key; `/auth/me` returns `is_admin`. `require_admin` (`api/deps.py`) 404s non-admins (not 403 — undiscoverable). `GET /admin/usage` (`routes/admin.py`) returns the global meter + top per-user spenders; the frontend shows it at `/dashboard/admin`, linked in the sidebar only when `user.is_admin`.

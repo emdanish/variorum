@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Brain,
   FolderGit2,
+  Gauge,
   LayoutDashboard,
   LayoutGrid,
   Lightbulb,
@@ -29,7 +30,13 @@ const NAV = [
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const { status } = useDashboard();
+  const { status, user } = useDashboard();
+
+  // The admin fleet-usage view is only linked for allow-listed operators; the
+  // backend independently gates the route, so hiding the link is just polish.
+  const nav = user?.is_admin
+    ? [...NAV, { href: "/dashboard/admin", label: "Admin", icon: Gauge }]
+    : NAV;
 
   return (
     <div className="flex h-full flex-col">
@@ -40,7 +47,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-2">
-        {NAV.map((item) => {
+        {nav.map((item) => {
           const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
           return (
             <Link

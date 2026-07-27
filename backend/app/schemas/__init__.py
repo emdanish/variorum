@@ -67,6 +67,8 @@ class UserResponse(BaseModel):
     name: str | None = None
     avatar_url: str | None = None
     github_user_id: int | None = None
+    github_login: str | None = None
+    is_admin: bool = False
 
 
 class InstallationResponse(BaseModel):
@@ -554,6 +556,29 @@ class UsageResponse(BaseModel):
     window_seconds: int
     resets_at: datetime
     resets_in_seconds: int
+
+
+class AdminUserUsage(BaseModel):
+    """A single user's AI spend in the current window, for the admin fleet view."""
+
+    user_id: int
+    login: str | None = None
+    name: str | None = None
+    used: int
+
+
+class AdminUsageResponse(BaseModel):
+    """Fleet-wide AI usage for the admin-only capacity view."""
+
+    global_used: int
+    global_limit: int
+    global_remaining: int
+    resets_at: datetime
+    resets_in_seconds: int
+    per_user_daily_limit: int
+    total_users: int
+    total_repositories: int
+    top_users: list[AdminUserUsage]
 
 
 class GitHubAppStatus(BaseModel):

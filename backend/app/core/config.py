@@ -62,6 +62,10 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000"]
     )
 
+    # GitHub logins (usernames) with access to the admin-only fleet-usage view.
+    # Comma-separated string or list; case-insensitive match. Empty = no admins.
+    admin_github_logins: Annotated[list[str], NoDecode] = Field(default_factory=list)
+
     database_url: str = DEFAULT_DATABASE_URL
 
     gemini_api_key_1: str = ""
@@ -85,12 +89,18 @@ class Settings(BaseSettings):
     github_app_private_key_path: str = "./secrets/github-app.pem"
     github_app_private_key_base64: str = ""
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "admin_github_logins", mode="before")
     @classmethod
-    def _split_cors(cls, value: object) -> object:
+    def _split_csv(cls, value: object) -> object:
         if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+            return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    def is_admin(self, github_login: str | None) -> bool:
+        """True if the given GitHub login is on the admin allowlist (case-insensitive)."""
+        if not github_login:
+            return False
+        return github_login.lower() in {a.lower() for a in self.admin_github_logins}
 
     @field_validator("database_url", mode="before")
     @classmethod

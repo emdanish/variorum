@@ -888,6 +888,12 @@ the AI free-tier fallback add no cost).
   quota regardless of any one user's remaining allotment. `require_credit`
   checks it after the per-user cap and returns **503** (capacity, logged at
   WARNING) when spent; `CreditGuard.commit()` increments both meters together.
+- **Admin-only fleet-usage view:** `ADMIN_GITHUB_LOGINS` allow-lists operators by
+  GitHub handle (`User.github_login`, migration `f2a9d5c8b1e4`, populated on OAuth
+  upsert; `/auth/me` now returns `is_admin`). `require_admin` 404s non-admins so
+  the surface is undiscoverable. `GET /admin/usage` returns the global ceiling,
+  its reset time, user/repo totals, and the top per-user spenders; the frontend
+  renders it at `/dashboard/admin`, linked in the sidebar only for admins.
 
 ---
 

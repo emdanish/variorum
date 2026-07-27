@@ -7,6 +7,8 @@ export interface User {
   name: string | null;
   avatar_url: string | null;
   github_user_id: number | null;
+  github_login: string | null;
+  is_admin: boolean;
 }
 
 export interface ApiToken {
@@ -474,6 +476,25 @@ export interface Usage {
   resets_in_seconds: number;
 }
 
+export interface AdminUserUsage {
+  user_id: number;
+  login: string | null;
+  name: string | null;
+  used: number;
+}
+
+export interface AdminUsage {
+  global_used: number;
+  global_limit: number;
+  global_remaining: number;
+  resets_at: string;
+  resets_in_seconds: number;
+  per_user_daily_limit: number;
+  total_users: number;
+  total_repositories: number;
+  top_users: AdminUserUsage[];
+}
+
 /** Event fired after any AI action that spends a credit, so the usage meter in
  *  the UI can refresh without prop-drilling through every action button. */
 export const USAGE_CHANGED_EVENT = "variorum:usage-changed";
@@ -555,6 +576,7 @@ export const loginUrl = `${BACKEND_URL}/api/v1/auth/github/login`;
 export const api = {
   systemStatus: () => request<SystemStatus>("/api/v1/system/status"),
   usage: () => request<Usage>("/api/v1/usage"),
+  adminUsage: () => request<AdminUsage>("/api/v1/admin/usage"),
   me: () => request<User>("/api/v1/auth/me"),
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
   listTokens: () => request<ApiToken[]>("/api/v1/auth/tokens"),

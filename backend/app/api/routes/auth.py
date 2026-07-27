@@ -73,8 +73,13 @@ async def github_callback(
 
 
 @router.get("/me", response_model=UserResponse)
-def me(user: User = Depends(get_current_user)) -> User:
-    return user
+def me(
+    user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> UserResponse:
+    resp = UserResponse.model_validate(user)
+    resp.is_admin = settings.is_admin(user.github_login)
+    return resp
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, response_model=None)

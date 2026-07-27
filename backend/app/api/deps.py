@@ -26,6 +26,7 @@ __all__ = [
     "get_optional_user",
     "CreditGuard",
     "require_credit",
+    "require_admin",
 ]
 
 
@@ -142,6 +143,17 @@ def require_credit(
             ),
         )
     return CreditGuard(db, user.id, settings)
+
+
+def require_admin(
+    user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> User:
+    """Gate an endpoint to the admin allowlist (ADMIN_GITHUB_LOGINS). 404 — not
+    403 — so the admin surface isn't even discoverable to non-admins."""
+    if not settings.is_admin(user.github_login):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return user
 
 
 _ = (AIService, Settings)

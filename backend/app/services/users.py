@@ -19,6 +19,7 @@ def upsert_user_from_github(db: Session, gh: GitHubUser) -> User:
     if user is None:
         user = User(
             github_user_id=gh.github_user_id,
+            github_login=gh.login,
             email=gh.email or f"{gh.login}@users.noreply.github.com",
             name=gh.name or gh.login,
             avatar_url=gh.avatar_url,
@@ -26,6 +27,7 @@ def upsert_user_from_github(db: Session, gh: GitHubUser) -> User:
         db.add(user)
     else:
         user.github_user_id = gh.github_user_id
+        user.github_login = gh.login
         if gh.email:
             user.email = gh.email
         user.name = gh.name or gh.login

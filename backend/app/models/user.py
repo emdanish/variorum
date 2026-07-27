@@ -19,6 +19,9 @@ class User(Base, TimestampMixin):
     name: Mapped[str | None] = mapped_column(String(255))
     avatar_url: Mapped[str | None] = mapped_column(String(1024))
     github_user_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True)
+    # GitHub username (login). Stored so admins can be allow-listed by handle and
+    # the fleet-usage view can label users. Not unique — GitHub can recycle logins.
+    github_login: Mapped[str | None] = mapped_column(String(255), index=True)
     # Optional Slack incoming-webhook URL for digest delivery.
     slack_webhook_url: Mapped[str | None] = mapped_column(String(512))
 
