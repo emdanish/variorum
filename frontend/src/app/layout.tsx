@@ -7,8 +7,12 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
 
+// Canonical public origin, used to resolve Open Graph / social-share URLs.
+// Override with NEXT_PUBLIC_SITE_URL (e.g. a preview deploy); defaults to prod.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://variorum.dev";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("http://localhost:3000"),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Variorum — The engineering memory layer for software teams",
     template: "%s · Variorum",
@@ -28,6 +32,8 @@ export const metadata: Metadata = {
     description:
       "Understand your codebase, keep docs in sync, and preserve engineering decisions.",
     type: "website",
+    url: SITE_URL,
+    siteName: "Variorum",
   },
 };
 
