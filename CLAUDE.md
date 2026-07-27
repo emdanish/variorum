@@ -139,7 +139,7 @@ Add a dependency only when it clearly beats the above and is free.
 
 - **Code style:** self-documenting names; comments explain *why*, never restate code. Python line length 100; `from __future__ import annotations`; `StrEnum` enums.
 - **Green gate before commit:** `ruff check .` + `mypy app` + `pytest` (backend) and `tsc --noEmit` + `npm run lint` (frontend) must pass. Every feature ships with tests.
-- **Security:** ownership-scope every resource; never commit/log secrets; least-privilege GitHub App (Contents/PR R/W, Issues read, Metadata); verify webhook HMAC; human-review gate on generated PRs. Production posture: fail-fast config validation (`config.production_security_issues`), security headers + HSTS, generic client errors + catch-all handler, in-process rate limiting (`core/ratelimit`), configurable session-cookie SameSite. (See `variorum-security`, `SECURITY.md`, `PRODUCTION_DEPLOYMENT_GUIDE.md`.)
+- **Security:** ownership-scope every resource; never commit/log secrets; least-privilege GitHub App (Contents/PR R/W, Issues read, Metadata); verify webhook HMAC; human-review gate on generated PRs. Production posture: fail-fast config validation (`config.production_security_issues`), security headers + HSTS, generic client errors + catch-all handler, in-process rate limiting (`core/ratelimit`), configurable session-cookie SameSite; `/health/ready` DB-readiness probe. (See `variorum-security`, `SECURITY.md`.)
 - **Git:** conventional commits with the Co-Authored-By trailer; confirm `.env`/secrets are git-ignored before committing. (See `variorum-git-github`.)
 - **Docs:** update the `PROJECT_PLAN.md` build log + this file when milestones land or conventions change.
 

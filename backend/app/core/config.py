@@ -81,6 +81,20 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_db_url(cls, value: object) -> object:
+        """Coerce a managed-Postgres URL to the psycopg (v3) driver. Providers
+        (Neon, Render, Supabase, Railway) hand out ``postgres://`` /
+        ``postgresql://`` URLs, which SQLAlchemy would route to the uninstalled
+        psycopg2 dialect. Rewriting the scheme lets the provider URL be pasted
+        verbatim into DATABASE_URL."""
+        if isinstance(value, str):
+            for scheme in ("postgresql://", "postgres://"):
+                if value.startswith(scheme):
+                    return "postgresql+psycopg://" + value[len(scheme):]
+        return value
+
     @property
     def is_production(self) -> bool:
         return self.environment.lower() in {"production", "prod"}

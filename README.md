@@ -163,7 +163,9 @@ docs/adr/           architecture decision records
 scripts/            dev / setup helpers
 ```
 
-See [`PRODUCTION_DEPLOYMENT_GUIDE.md`](./PRODUCTION_DEPLOYMENT_GUIDE.md) to deploy.
+Deployment: the frontend runs on Vercel and the backend as a Docker web service
+(the repo ships a `backend/Dockerfile` + `entrypoint.sh`) against a managed
+PostgreSQL, with `/health/ready` as the readiness probe.
 
 See [`PROJECT_PLAN.md`](./PROJECT_PLAN.md) for the full product requirements,
 architecture, and build log, and [`SETUP.md`](./SETUP.md) for the GitHub App walkthrough.
@@ -182,7 +184,7 @@ Variorum is built for repository access, so security is a first-class concern:
   generic client-facing errors (full detail logged server-side only).
 
 See [`SECURITY.md`](./SECURITY.md) for the security model and how to report a
-vulnerability, and [`PRODUCTION_CHECKLIST.md`](./PRODUCTION_CHECKLIST.md) before deploying.
+vulnerability.
 
 ## Contributing
 
