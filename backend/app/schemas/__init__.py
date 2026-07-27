@@ -311,6 +311,41 @@ class DigestReport(BaseModel):
     generated_at: datetime
 
 
+class MetricSnapshotPoint(BaseModel):
+    captured_at: datetime
+    health_score: int
+    doc_coverage_pct: float
+    single_owner_modules: int
+    module_count: int
+    critical_hotspots: int
+    high_hotspots: int
+    drift_open: int
+    risk_open: int
+
+
+class TrendsReport(BaseModel):
+    repository_id: int
+    snapshots: list[MetricSnapshotPoint] = []
+
+
+class SnapshotResult(BaseModel):
+    captured: bool
+    new_alerts: int
+    latest: MetricSnapshotPoint | None = None
+
+
+class AlertResponse(BaseModel):
+    id: int
+    repository_id: int
+    kind: str
+    severity: str
+    title: str
+    detail: str
+    created_at: datetime
+    acknowledged_at: datetime | None = None
+    repo_full_name: str | None = None
+
+
 class ContradictionItem(BaseModel):
     source: KnowledgeHit
     explanation: str

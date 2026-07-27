@@ -132,6 +132,42 @@ export function ActivityArea({ data }: { data: { date: string; count: number }[]
   );
 }
 
+export function HealthTrend({ data }: { data: { date: string; health: number }[] }) {
+  if (data.length < 2) return <EmptyChart label="Not enough history yet" />;
+  return (
+    <div className="h-52">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+          <defs>
+            <linearGradient id="healthFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={CHART_COLORS.primary} stopOpacity={0.35} />
+              <stop offset="100%" stopColor={CHART_COLORS.primary} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <XAxis dataKey="date" tick={AXIS} axisLine={false} tickLine={false} minTickGap={24} />
+          <YAxis
+            tick={AXIS}
+            axisLine={false}
+            tickLine={false}
+            allowDecimals={false}
+            domain={[0, 100]}
+            width={28}
+          />
+          <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ stroke: CURSOR_STROKE }} />
+          <Area
+            type="monotone"
+            dataKey="health"
+            name="Health score"
+            stroke={CHART_COLORS.primary}
+            strokeWidth={2}
+            fill="url(#healthFill)"
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function EmptyChart({ label = "No data yet" }: { label?: string }) {
   return (
     <div className="flex h-36 items-center justify-center text-sm text-muted-foreground">

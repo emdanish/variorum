@@ -24,6 +24,7 @@ import { DecisionTimeline } from "@/components/dashboard/decision-timeline";
 import { DigestCard } from "@/components/dashboard/digest-card";
 import { DriftFindingCard, RiskFindingCard } from "@/components/dashboard/finding-cards";
 import { MetricsSection } from "@/components/dashboard/metrics-section";
+import { MonitoringSection } from "@/components/dashboard/monitoring-section";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { PrBriefingPanel } from "@/components/dashboard/pr-briefing";
 import { RepoSearch } from "@/components/dashboard/repo-search";
@@ -293,6 +294,8 @@ export default function RepositoryDetailPage() {
         repoFullName={repo.full_name}
         defaultBranch={repo.default_branch}
       />
+
+      <MonitoringSection repoId={repo.id} />
 
       <PrBriefingPanel
         repoId={repo.id}

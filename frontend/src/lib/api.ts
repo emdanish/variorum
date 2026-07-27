@@ -33,6 +33,35 @@ export interface DigestSchedule {
   last_sent_at: string | null;
 }
 
+export interface MetricSnapshotPoint {
+  captured_at: string;
+  health_score: number;
+  doc_coverage_pct: number;
+  single_owner_modules: number;
+  module_count: number;
+  critical_hotspots: number;
+  high_hotspots: number;
+  drift_open: number;
+  risk_open: number;
+}
+
+export interface TrendsReport {
+  repository_id: number;
+  snapshots: MetricSnapshotPoint[];
+}
+
+export interface Alert {
+  id: number;
+  repository_id: number;
+  kind: string;
+  severity: string;
+  title: string;
+  detail: string;
+  created_at: string;
+  acknowledged_at: string | null;
+  repo_full_name: string | null;
+}
+
 export interface Repository {
   id: number;
   installation_id: number;
@@ -488,6 +517,16 @@ export const api = {
     }),
   deleteDigestSchedule: (id: number) =>
     request<void>(`/api/v1/repositories/${id}/digest/schedule`, { method: "DELETE" }),
+  trends: (id: number) => request<TrendsReport>(`/api/v1/repositories/${id}/trends`),
+  captureSnapshot: (id: number) =>
+    request<{ captured: boolean; new_alerts: number }>(
+      `/api/v1/repositories/${id}/snapshot`,
+      { method: "POST" },
+    ),
+  repoAlerts: (id: number) => request<Alert[]>(`/api/v1/repositories/${id}/alerts`),
+  ackAlert: (id: number, alertId: number) =>
+    request<void>(`/api/v1/repositories/${id}/alerts/${alertId}/ack`, { method: "POST" }),
+  alerts: () => request<Alert[]>("/api/v1/alerts"),
   contradictions: (id: number, prNumber: number) =>
     request<ContradictionReport>(`/api/v1/repositories/${id}/contradictions/${prNumber}`),
   teams: () => request<TeamInsights[]>("/api/v1/teams"),

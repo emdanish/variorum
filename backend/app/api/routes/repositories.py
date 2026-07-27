@@ -13,6 +13,7 @@ from app.api.deps import get_ai_service, get_current_user, get_db, get_github_au
 from app.api.routes.analysis import finding_to_response
 from app.core.logging import get_logger
 from app.models import (
+    Alert,
     AnalysisJob,
     CodeSymbol,
     DecisionEntry,
@@ -22,6 +23,7 @@ from app.models import (
     GitHubInstallation,
     IndexingStatus,
     KnowledgeEntry,
+    MetricSnapshot,
     Repository,
     RepositoryGuide,
     RiskFinding,
@@ -29,6 +31,7 @@ from app.models import (
 )
 from app.schemas import (
     ActivityPoint,
+    AlertResponse,
     AnalyzePrRequest,
     AnalyzePrResponse,
     AskRequest,
@@ -49,6 +52,7 @@ from app.schemas import (
     IngestResponse,
     JobResponse,
     KnowledgeStats,
+    MetricSnapshotPoint,
     OwnershipReport,
     PrBriefing,
     PrCommentResult,
@@ -61,12 +65,15 @@ from app.schemas import (
     RiskPath,
     SearchResults,
     SlackSendResult,
+    SnapshotResult,
+    TrendsReport,
 )
 from app.services import contradictions as contradictions_svc
 from app.services import decisions as decisions_svc
 from app.services import digest as digest_svc
 from app.services import insights as insights_svc
 from app.services import metrics as metrics_svc
+from app.services import monitoring as monitoring_svc
 from app.services import orientation as orientation_svc
 from app.services import pr_impact as pr_impact_svc
 from app.services import schedule as schedule_svc
@@ -405,6 +412,93 @@ def repository_health(
     """Composite knowledge-health score (documentation, coverage, risk, ownership)."""
     repo = _get_owned_repo(db, user.id, repo_id)
     return HealthScore(**metrics_svc.compute_health(db, repo.id))
+
+
+def _snapshot_point(s: MetricSnapshot) -> MetricSnapshotPoint:
+    return MetricSnapshotPoint(
+        captured_at=s.captured_at,
+        health_score=s.health_score,
+        doc_coverage_pct=s.doc_coverage_pct,
+        single_owner_modules=s.single_owner_modules,
+        module_count=s.module_count,
+        critical_hotspots=s.critical_hotspots,
+        high_hotspots=s.high_hotspots,
+        drift_open=s.drift_open,
+        risk_open=s.risk_open,
+    )
+
+
+@router.get("/{repo_id}/trends", response_model=TrendsReport)
+def repository_trends(
+    repo_id: int,
+    limit: int = Query(60, ge=2, le=365),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TrendsReport:
+    """Time series of knowledge-health metrics for trend charts (oldest → newest)."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    rows = monitoring_svc.history(db, repo.id, limit=limit)
+    return TrendsReport(
+        repository_id=repo.id, snapshots=[_snapshot_point(s) for s in rows]
+    )
+
+
+@router.post("/{repo_id}/snapshot", response_model=SnapshotResult)
+def capture_snapshot(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SnapshotResult:
+    """Record a metrics snapshot now and raise alerts for any regression."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    snapshot, alerts = monitoring_svc.capture(db, repo.id, datetime.now(UTC))
+    return SnapshotResult(
+        captured=True, new_alerts=len(alerts), latest=_snapshot_point(snapshot)
+    )
+
+
+def _alert_to_response(a: Alert, *, full_name: str | None = None) -> AlertResponse:
+    return AlertResponse(
+        id=a.id,
+        repository_id=a.repository_id,
+        kind=a.kind,
+        severity=a.severity,
+        title=a.title,
+        detail=a.detail,
+        created_at=a.created_at,
+        acknowledged_at=a.acknowledged_at,
+        repo_full_name=full_name,
+    )
+
+
+@router.get("/{repo_id}/alerts", response_model=list[AlertResponse])
+def repository_alerts(
+    repo_id: int,
+    include_acknowledged: bool = False,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[AlertResponse]:
+    repo = _get_owned_repo(db, user.id, repo_id)
+    rows = monitoring_svc.list_alerts(
+        db, repo.id, include_acknowledged=include_acknowledged
+    )
+    return [_alert_to_response(a, full_name=repo.full_name) for a in rows]
+
+
+@router.post(
+    "/{repo_id}/alerts/{alert_id}/ack",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
+def acknowledge_alert(
+    repo_id: int,
+    alert_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    repo = _get_owned_repo(db, user.id, repo_id)
+    if not monitoring_svc.acknowledge(db, repo.id, alert_id, datetime.now(UTC)):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
 
 
 def _decision_to_response(d: DecisionEntry) -> DecisionResponse:

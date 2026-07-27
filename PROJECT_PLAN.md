@@ -962,6 +962,37 @@ Digests can now be delivered to Slack on a weekly cadence, not just on-demand.
 **Status:** 233 backend tests (+7), mypy + ruff clean; frontend tsc + lint clean,
 production build passes. Phase 4 tracks 4C + 4A delivered.
 
+### 4B + 4D — alerts and trends (complete)
+
+A shared **metric-snapshot** foundation powers both: point-in-time captures of a
+repo's knowledge health, from which trends are charted (4D) and regressions are
+detected (4B).
+
+- **Models:** `MetricSnapshot` (health, coverage, ownership, hotspot, finding
+  counts + `captured_at`) and `Alert` (kind/severity/title/detail, acknowledged)
+  — migration `f7a3c9e51d24`.
+- **`services/monitoring.py`:** `compute_metrics` (reuses the metrics services),
+  `capture` (snapshot + diff-vs-previous → persist alerts), `history`,
+  `detect_alerts` (pure: health drop ≥10 pts, new critical hotspot, single-owner
+  increase — consecutive-snapshot comparison self-dedupes), `list_alerts` /
+  `acknowledge` / `list_alerts_for_user`, and `capture_stale` (periodic sweep).
+- **Capture triggers:** after each `ingest` job, on the manual
+  `POST /repositories/{id}/snapshot`, and via the scheduler tick (`capture_stale`,
+  ≥12h apart per repo) so trends/alerts advance without activity.
+- **Endpoints (4D):** `GET /repositories/{id}/trends`, `POST …/snapshot`.
+  **(4B):** `GET /repositories/{id}/alerts`, `POST …/alerts/{id}/ack`, and a
+  cross-repo feed `GET /alerts`.
+- **Frontend:** a Health-trend area chart + inline alerts on the repo page
+  (`MonitoringSection`, dataviz-guided: single series, no legend, 2px line,
+  recessive axes), and a **topbar notification bell** (unacked count + dropdown +
+  acknowledge) as the notification center.
+- **Deliberate scope:** alerts surface in-app only; Slack delivery of alerts is a
+  future extension (avoids noise + a new opt-in). No new dependency; $0.
+
+**Status:** 243 backend tests (+10), mypy + ruff clean; frontend tsc + lint clean,
+production build passes. Phase 4 (4A/4B/4C/4D) complete. ADR
+[`0005`](./docs/adr/0005-metric-snapshots-alerts-trends.md).
+
 ---
 
 ## Environment, skills & tooling

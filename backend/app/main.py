@@ -25,6 +25,7 @@ async def _scheduler_loop(interval_seconds: int) -> None:
     """Tick the weekly-digest scheduler forever. Each tick opens its own session
     and is fully isolated — a failing tick never stops the loop."""
     from app.db.session import SessionLocal
+    from app.services.monitoring import capture_stale
     from app.services.schedule import run_due_digests
 
     while True:
@@ -32,9 +33,13 @@ async def _scheduler_loop(interval_seconds: int) -> None:
         try:
             db = SessionLocal()
             try:
-                sent = await run_due_digests(db, datetime.now(UTC))
+                now = datetime.now(UTC)
+                sent = await run_due_digests(db, now)
                 if sent:
                     logger.info("scheduler tick sent %d digest(s)", sent)
+                snapped = capture_stale(db, now)
+                if snapped:
+                    logger.info("scheduler tick captured %d snapshot(s)", snapped)
             finally:
                 db.close()
         except Exception:  # noqa: BLE001 — a bad tick must not kill the loop

@@ -90,6 +90,15 @@ def _run(
             except Exception as exc:  # noqa: BLE001 — churn collection is best-effort
                 logger.warning("file-change collection failed repo=%s: %s", repo.full_name, exc)
 
+        try:
+            from datetime import UTC, datetime
+
+            from app.services.monitoring import capture as capture_snapshot
+
+            capture_snapshot(db, repo.id, datetime.now(UTC))
+        except Exception as exc:  # noqa: BLE001 — snapshotting is best-effort
+            logger.warning("metric snapshot failed repo=%s: %s", repo.full_name, exc)
+
         logger.info(
             "ingested history repo=%s entries=%d embedded=%d file_changes=%d",
             repo.full_name,

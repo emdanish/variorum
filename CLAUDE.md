@@ -70,7 +70,7 @@ backend/app/
     github/          App auth, OAuth, REST client, webhook verify, events, installations
     indexer/         tree-sitter code index, doc discovery, doc↔code linker, archive, pipeline
     analysis/        drift, doc_pr, docfix, pr_context, risk, testgen, test_pr
-    knowledge.py, qa.py, insights.py, orientation.py, users.py
+    knowledge.py, qa.py, insights.py, orientation.py, users.py, schedule.py, monitoring.py, pr_comment.py
   workers/           indexing, pr_analysis, risk_analysis, pr_comment, ingest (BackgroundTasks)
 backend/alembic/     migrations         backend/tests/     pytest suite (+ conftest, _fakes)
 backend/scripts/     check_env.py, check_ai.py     backend/Dockerfile + entrypoint.sh
@@ -162,7 +162,8 @@ powershell -ExecutionPolicy Bypass -File scripts/start-all.ps1
 ### Gotchas (learned the hard way)
 - **Never run `next build` while `next dev` is running** — it corrupts the shared `.next`. Verify with `tsc --noEmit` + `npm run lint`.
 - After editing `.env`, **restart the backend** (settings are read once at startup).
-- The **weekly-digest scheduler** is an in-process FastAPI-lifespan loop (`app/main.py` → `services/schedule.py`), gated by `SCHEDULER_ENABLED` (default on; off in tests). It only sends when a repo has a `DigestSchedule` due *and* the owner has a Slack webhook. Single-instance only — a durable scheduler is the production upgrade (same posture as `BackgroundTasks`).
+- The **in-process scheduler** is a FastAPI-lifespan loop (`app/main.py`), gated by `SCHEDULER_ENABLED` (default on; off in tests). Each tick (a) sends due weekly digests (`services/schedule.py` → Slack, only when a `DigestSchedule` is due *and* the owner has a webhook) and (b) captures stale metric snapshots (`services/monitoring.py.capture_stale`, ≥12h apart per indexed repo). Single-instance only — a durable scheduler is the production upgrade (same posture as `BackgroundTasks`).
+- **Metric snapshots & alerts** (`services/monitoring.py`): `MetricSnapshot` is a point-in-time capture of health/coverage/ownership/hotspot/finding counts; captured after each ingest, on `POST …/snapshot`, and by the scheduler. Trends read the series; `detect_alerts` diffs consecutive snapshots (health drop / new critical hotspot / single-owner rise) into `Alert` rows surfaced in the topbar bell. Alerts are in-app only (no Slack).
 - Shared PG enum in a new table's migration → set `create_type=False`.
 - Free-tier AI keys reject some model names (404) and rate-limit (429/503) — rely on the fallback chain; re-verify models with `check_ai.py`.
 - Don't import `test_*`-named functions into test modules (pytest collects them) — alias.
