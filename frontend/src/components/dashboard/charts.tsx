@@ -137,7 +137,7 @@ export function HealthTrend({ data }: { data: { date: string; health: number }[]
   return (
     <div className="h-52">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
           <defs>
             <linearGradient id="healthFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={CHART_COLORS.primary} stopOpacity={0.35} />
@@ -151,7 +151,8 @@ export function HealthTrend({ data }: { data: { date: string; health: number }[]
             tickLine={false}
             allowDecimals={false}
             domain={[0, 100]}
-            width={28}
+            ticks={[0, 25, 50, 75, 100]}
+            width={36}
           />
           <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ stroke: CURSOR_STROKE }} />
           <Area
