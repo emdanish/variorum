@@ -49,6 +49,8 @@ from app.schemas import (
     KnowledgeStats,
     OwnershipReport,
     PrBriefing,
+    PrCommentResult,
+    PrCommentsConfig,
     RepositoryDetail,
     RepositoryGuideResponse,
     RepositoryInsights,
@@ -72,6 +74,7 @@ from app.services.qa import answer_question, retrieve, retrieve_decisions
 from app.workers.indexing import run_index_job
 from app.workers.ingest import run_ingest_history_job
 from app.workers.pr_analysis import run_pr_analysis_job
+from app.workers.pr_comment import run_pr_comment_job
 from app.workers.risk_analysis import run_risk_analysis_job
 
 logger = get_logger("variorum.repositories")
@@ -496,6 +499,43 @@ async def pr_impact_briefing(
 
     briefing = pr_impact_svc.build_briefing(db, repo.id, [f.path for f in changed])
     return PrBriefing(pr_number=pr_number, **briefing)
+
+
+@router.put("/{repo_id}/pr-comments", response_model=PrCommentsConfig)
+def set_pr_comments(
+    repo_id: int,
+    payload: PrCommentsConfig,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PrCommentsConfig:
+    """Toggle automatic PR briefing comments (posted on pull_request webhooks)."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    repo.pr_comments_enabled = payload.enabled
+    db.add(repo)
+    db.commit()
+    logger.info("pr comments %s repo=%s", "enabled" if payload.enabled else "disabled", repo.id)
+    return PrCommentsConfig(enabled=repo.pr_comments_enabled)
+
+
+@router.post("/{repo_id}/pr-comment/{pr_number}", response_model=PrCommentResult)
+def post_pr_comment(
+    repo_id: int,
+    pr_number: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PrCommentResult:
+    """Post (or refresh) Variorum's impact-briefing comment on a PR now. This is
+    the owner's explicit action, so it runs regardless of the auto-post toggle."""
+    if pr_number <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid PR number")
+    repo = _get_owned_repo(db, user.id, repo_id)
+    result = run_pr_comment_job(repo.id, pr_number, require_enabled=False, db=db)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Couldn't post the comment to GitHub. Check the App's PR permissions.",
+        )
+    return PrCommentResult(action=result.get("action", "posted"), url=result.get("url"))
 
 
 @router.get("/{repo_id}/search", response_model=SearchResults)

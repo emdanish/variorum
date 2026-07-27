@@ -71,7 +71,7 @@ backend/app/
     indexer/         tree-sitter code index, doc discovery, doc↔code linker, archive, pipeline
     analysis/        drift, doc_pr, docfix, pr_context, risk, testgen, test_pr
     knowledge.py, qa.py, insights.py, orientation.py, users.py
-  workers/           indexing, pr_analysis, risk_analysis, ingest (BackgroundTasks)
+  workers/           indexing, pr_analysis, risk_analysis, pr_comment, ingest (BackgroundTasks)
 backend/alembic/     migrations         backend/tests/     pytest suite (+ conftest, _fakes)
 backend/scripts/     check_env.py, check_ai.py     backend/Dockerfile + entrypoint.sh
 frontend/src/

@@ -33,6 +33,7 @@ export interface Repository {
   private: boolean;
   indexing_status: string;
   last_indexed_at: string | null;
+  pr_comments_enabled: boolean;
 }
 
 export interface RepositoryDetail extends Repository {
@@ -452,6 +453,16 @@ export const api = {
     request<Decision[]>(`/api/v1/repositories/${id}/decisions`, { method: "POST" }),
   prBriefing: (id: number, prNumber: number) =>
     request<PrBriefing>(`/api/v1/repositories/${id}/pr-briefing/${prNumber}`),
+  setPrComments: (id: number, enabled: boolean) =>
+    request<{ enabled: boolean }>(`/api/v1/repositories/${id}/pr-comments`, {
+      method: "PUT",
+      body: JSON.stringify({ enabled }),
+    }),
+  postPrComment: (id: number, prNumber: number) =>
+    request<{ action: string; url: string | null }>(
+      `/api/v1/repositories/${id}/pr-comment/${prNumber}`,
+      { method: "POST" },
+    ),
   search: (id: number, q: string) =>
     request<SearchResults>(`/api/v1/repositories/${id}/search?q=${encodeURIComponent(q)}`),
   digest: (id: number, days = 7) =>

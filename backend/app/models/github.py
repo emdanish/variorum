@@ -50,5 +50,10 @@ class Repository(Base, TimestampMixin):
         default=IndexingStatus.pending, nullable=False
     )
     last_indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Opt-in: when true, Variorum auto-posts a PR impact briefing comment on
+    # pull_request webhooks. Off by default — posting to GitHub is outward-facing,
+    # so it never happens without the owner enabling it (manual posts stay
+    # available regardless).
+    pr_comments_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     installation: Mapped["GitHubInstallation"] = relationship(back_populates="repositories")

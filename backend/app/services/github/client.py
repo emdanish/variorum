@@ -293,6 +293,41 @@ class GitHubClient:
         data = resp.json()
         return PullRequestResult(number=data["number"], url=data["html_url"])
 
+    async def list_issue_comments(
+        self, installation_id: int, full_name: str, number: int, *, max_items: int = 100
+    ) -> list[dict]:
+        """List comments on an issue or pull request (PRs are issues for the
+        comment API). Used to find Variorum's own sticky comment for update."""
+        return await self._paginate(
+            installation_id, f"/repos/{full_name}/issues/{number}/comments", {}, max_items
+        )
+
+    async def create_issue_comment(
+        self, installation_id: int, full_name: str, number: int, body: str
+    ) -> dict:
+        headers = await self._installation_headers(installation_id)
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            resp = await client.post(
+                f"{GITHUB_API}/repos/{full_name}/issues/{number}/comments",
+                headers=headers,
+                json={"body": body},
+            )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def update_issue_comment(
+        self, installation_id: int, full_name: str, comment_id: int, body: str
+    ) -> dict:
+        headers = await self._installation_headers(installation_id)
+        async with httpx.AsyncClient(timeout=30.0, transport=self._transport) as client:
+            resp = await client.patch(
+                f"{GITHUB_API}/repos/{full_name}/issues/comments/{comment_id}",
+                headers=headers,
+                json={"body": body},
+            )
+        resp.raise_for_status()
+        return resp.json()
+
     async def _paginate(
         self, installation_id: int, path: str, params: dict, max_items: int
     ) -> list[dict]:

@@ -10,6 +10,7 @@ from app.core.logging import get_logger
 from app.services.github.events import dispatch_webhook, resolve_pr_analysis
 from app.services.github.webhook import verify_webhook_signature
 from app.workers.pr_analysis import run_pr_analysis_job
+from app.workers.pr_comment import run_pr_comment_job
 from app.workers.risk_analysis import run_risk_analysis_job
 
 logger = get_logger("variorum.webhooks")
@@ -51,6 +52,15 @@ async def github_webhook(
             )
             background_tasks.add_task(
                 run_risk_analysis_job, request_.repository_id, request_.pr_number
+            )
+            # Runs after drift + risk (BackgroundTasks are sequential), so the
+            # briefing comment reflects their findings. No-op unless the repo has
+            # opted in (require_enabled=True).
+            background_tasks.add_task(
+                run_pr_comment_job,
+                request_.repository_id,
+                request_.pr_number,
+                require_enabled=True,
             )
             result = f"pr_analysis:queued:{request_.pr_number}"
     else:

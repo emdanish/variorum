@@ -902,7 +902,40 @@ endpoint, and a semantic query ("why was the AI provider layer designed this
 way") correctly surfaced the AI-provider-fallback decision as the top hit.
 
 **Status:** 216 backend tests (+10), mypy + ruff clean. `alembic upgrade head`
-still succeeds with or without pgvector.
+still succeeds with or without pgvector. (ADR
+[`0003`](./docs/adr/0003-decisions-in-rag-retrieval.md).)
+
+---
+
+## Phase 4 — from insight to workflow (in progress)
+
+Phases 0–3 answered questions in the dashboard; Phase 4 pushes the answers into
+where engineers already work.
+
+### 4C — PR-native impact briefings (complete)
+
+The PR Impact Briefing now posts to the pull request itself as a **single sticky
+comment** (per-file hotspot risk, module owner / bus factor, tests, plus open
+doc-drift and test-risk counts for the PR). A hidden marker makes it idempotent —
+repeated runs update one comment instead of stacking.
+
+- **GitHub client:** `list_issue_comments` / `create_issue_comment` /
+  `update_issue_comment` (Pull requests: write — no new App permission).
+- **`services/pr_comment.py`:** Markdown rendering + `upsert_pr_comment` (sticky
+  by marker). **`workers/pr_comment.py`:** builds the briefing, counts PR
+  findings, upserts — best-effort, never crashes the worker.
+- **Opt-in:** `Repository.pr_comments_enabled` (migration `d1e5b7a34f96`, default
+  false). The `pull_request` webhook enqueues the comment job *after* drift +
+  risk (sequential BackgroundTasks) so it reflects their findings — but only when
+  enabled. A manual endpoint (`POST /repositories/{id}/pr-comment/{pr_number}`)
+  posts on the owner's explicit action regardless.
+- **Frontend:** an auto-post toggle and a "Post to GitHub" button on the PR
+  briefing panel.
+- Posting stays within the human-review gate (guidance only) and $0 constraint.
+  ADR [`0004`](./docs/adr/0004-pr-native-briefing-comments.md).
+
+**Status:** 226 backend tests (+10), mypy + ruff clean; frontend tsc + lint
+clean, production build passes. (4A — scheduled digests — is next.)
 
 ---
 

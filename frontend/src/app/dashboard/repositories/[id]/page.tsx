@@ -298,6 +298,7 @@ export default function RepositoryDetailPage() {
         repoId={repo.id}
         repoFullName={repo.full_name}
         defaultBranch={repo.default_branch}
+        initialAutoPost={repo.pr_comments_enabled}
       />
 
       <DecisionTimeline repoId={repo.id} />

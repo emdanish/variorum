@@ -23,17 +23,37 @@ export function PrBriefingPanel({
   repoId,
   repoFullName,
   defaultBranch,
+  initialAutoPost = false,
 }: {
   repoId: number;
   repoFullName: string;
   defaultBranch: string;
+  initialAutoPost?: boolean;
 }) {
+  const [autoPost, setAutoPost] = useState(initialAutoPost);
+  const [savingAuto, setSavingAuto] = useState(false);
+
+  const toggleAutoPost = async () => {
+    const next = !autoPost;
+    setSavingAuto(true);
+    try {
+      await api.setPrComments(repoId, next);
+      setAutoPost(next);
+      toast.success(next ? "Auto-posting briefings to new PRs" : "Auto-posting disabled");
+    } catch (e) {
+      toast.error("Couldn't update setting", { description: (e as Error).message });
+    } finally {
+      setSavingAuto(false);
+    }
+  };
+
   const [value, setValue] = useState("");
   const [loading, setLoading] = useState(false);
   const [briefing, setBriefing] = useState<PrBriefing | null>(null);
   const [analyzedPr, setAnalyzedPr] = useState<number | null>(null);
   const [checkingContra, setCheckingContra] = useState(false);
   const [contradictions, setContradictions] = useState<ContradictionItem[] | null>(null);
+  const [posting, setPosting] = useState(false);
 
   const run = async () => {
     const n = parseInt(value, 10);
@@ -63,6 +83,24 @@ export function PrBriefingPanel({
       toast.error("Couldn't check contradictions", { description: (e as Error).message });
     } finally {
       setCheckingContra(false);
+    }
+  };
+
+  const postToGithub = async () => {
+    if (analyzedPr === null) return;
+    setPosting(true);
+    try {
+      const res = await api.postPrComment(repoId, analyzedPr);
+      toast.success(`Briefing ${res.action} on PR #${analyzedPr}`, {
+        description: res.url ?? undefined,
+        action: res.url
+          ? { label: "View", onClick: () => window.open(res.url!, "_blank") }
+          : undefined,
+      });
+    } catch (e) {
+      toast.error("Couldn't post to GitHub", { description: (e as Error).message });
+    } finally {
+      setPosting(false);
     }
   };
 
@@ -99,6 +137,28 @@ export function PrBriefingPanel({
         </div>
       </CardHeader>
       <CardContent>
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2">
+          <span className="text-xs text-muted-foreground">
+            Auto-post this briefing as a comment on every new PR
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoPost}
+            aria-label="Auto-post PR briefings to GitHub"
+            disabled={savingAuto}
+            onClick={() => void toggleAutoPost()}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+              autoPost ? "bg-primary" : "bg-border"
+            } disabled:opacity-60`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                autoPost ? "translate-x-4" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
         {!briefing ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Enter a pull-request number to see a pre-merge impact briefing for its changed files.
@@ -167,20 +227,36 @@ export function PrBriefingPanel({
                 <span className="text-xs text-muted-foreground">
                   Does this PR contradict a recorded decision?
                 </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={checkingContra}
-                  onClick={() => void checkContradictions()}
-                >
-                  {checkingContra ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking…
-                    </>
-                  ) : (
-                    "Check contradictions"
-                  )}
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={checkingContra}
+                    onClick={() => void checkContradictions()}
+                  >
+                    {checkingContra ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking…
+                      </>
+                    ) : (
+                      "Check contradictions"
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={posting}
+                    onClick={() => void postToGithub()}
+                    title="Post this briefing as a comment on the GitHub PR"
+                  >
+                    {posting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <GitPullRequest className="h-3.5 w-3.5" />
+                    )}
+                    Post to GitHub
+                  </Button>
+                </div>
               </div>
               {contradictions !== null &&
                 (contradictions.length === 0 ? (

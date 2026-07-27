@@ -75,6 +75,16 @@ class RepositoryResponse(BaseModel):
     private: bool
     indexing_status: str
     last_indexed_at: datetime | None = None
+    pr_comments_enabled: bool = False
+
+
+class PrCommentsConfig(BaseModel):
+    enabled: bool
+
+
+class PrCommentResult(BaseModel):
+    action: str
+    url: str | None = None
 
 
 class RepositoryDetail(RepositoryResponse):
