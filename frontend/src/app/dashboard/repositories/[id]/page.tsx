@@ -23,6 +23,7 @@ import { ActivityArea, Bars, CHART_COLORS, Donut } from "@/components/dashboard/
 import { DecisionTimeline } from "@/components/dashboard/decision-timeline";
 import { DigestCard } from "@/components/dashboard/digest-card";
 import { DriftFindingCard, RiskFindingCard } from "@/components/dashboard/finding-cards";
+import { ChangeBriefingPanel } from "@/components/dashboard/change-briefing";
 import { MetricsSection } from "@/components/dashboard/metrics-section";
 import { MonitoringSection } from "@/components/dashboard/monitoring-section";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -268,6 +269,8 @@ export default function RepositoryDetailPage() {
           accent={risk.some((r) => r.risk_level === "high")}
         />
       </div>
+
+      <ChangeBriefingPanel repoId={repo.id} />
 
       <RepoSearch
         repoId={repo.id}

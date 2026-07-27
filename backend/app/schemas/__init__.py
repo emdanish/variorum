@@ -262,6 +262,47 @@ class PrBriefing(BaseModel):
     summary: PrBriefingSummary
 
 
+class ChangeBriefingRequest(BaseModel):
+    query: str = Field(min_length=3, max_length=2000)
+
+
+class ChangeLocation(BaseModel):
+    path: str
+    name: str
+    kind: str
+    url: str | None = None
+    hotspot_score: int | None = None
+    hotspot_level: str | None = None
+    has_tests: bool | None = None
+    module: str
+    risk_findings: int = 0
+
+
+class ChangeExpert(BaseModel):
+    module: str
+    primary_owner: str | None = None
+    bus_factor: int | None = None
+    single_owner: bool = False
+
+
+class ChangeDocHit(BaseModel):
+    path: str
+    title: str | None = None
+    url: str | None = None
+
+
+class ChangeBriefing(BaseModel):
+    query: str
+    summary: str | None = None  # best-effort AI TL;DR
+    locations: list[ChangeLocation] = []
+    experts: list[ChangeExpert] = []
+    decisions: list["DecisionHit"] = []
+    history: list["KnowledgeHit"] = []
+    docs_to_update: list[ChangeDocHit] = []
+    test_gaps: list[str] = []
+    provider: str | None = None
+
+
 class SymbolHit(BaseModel):
     name: str
     path: str

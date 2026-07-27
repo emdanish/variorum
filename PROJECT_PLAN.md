@@ -1032,6 +1032,33 @@ keyword; embeddings backfill on the next index/push once quota resets.
 
 ---
 
+## Phase 5 — Tier 2: the Change Briefing (complete)
+
+The flagship "cannot work without it" workflow: describe a change you're about to
+make and get one cited, actionable pre-work briefing — no PR required.
+
+- **`services/change_briefing.py`** orchestrates existing data (introduces no new
+  source): code-aware retrieval locates the relevant symbols/files, then it joins
+  per-file hotspot risk + test presence, module ownership (single-owner/bus-factor
+  areas surfaced as *who to loop in*), relevant decisions + history (*why it's
+  this way*), docs linked to those files (*what will drift*), and untested touched
+  files (*tests to add*).
+- **Deterministic core, best-effort AI.** The whole briefing is built without AI
+  (degrades to keyword retrieval under quota); a short "before you start" TL;DR is
+  layered on and omitted if the provider is unavailable — so it never hard-fails
+  on a free-tier 429.
+- **`POST /repositories/{id}/change-briefing`** + a prominent **"Plan a change"**
+  panel at the top of the repository page: every section is a next step (open this
+  file, ask this person, update this doc, add this test) with jump-to-source
+  links — actionable, not stats.
+- ADR [`0007`](./docs/adr/0007-change-briefing.md).
+
+**Status:** 255 backend tests (+6), mypy + ruff clean; frontend tsc + lint clean,
+production build passes. Pre-work Change Briefing and post-hoc PR Impact Briefing
+are separate surfaces for the two moments.
+
+---
+
 ## Environment, skills & tooling
 
 **Permanent memory:** [`CLAUDE.md`](./CLAUDE.md) is the entry point for every

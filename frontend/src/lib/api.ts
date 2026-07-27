@@ -256,6 +256,43 @@ export interface KnowledgeHit {
   url: string | null;
 }
 
+export interface ChangeLocation {
+  path: string;
+  name: string;
+  kind: string;
+  url: string | null;
+  hotspot_score: number | null;
+  hotspot_level: string | null;
+  has_tests: boolean | null;
+  module: string;
+  risk_findings: number;
+}
+
+export interface ChangeExpert {
+  module: string;
+  primary_owner: string | null;
+  bus_factor: number | null;
+  single_owner: boolean;
+}
+
+export interface ChangeDocHit {
+  path: string;
+  title: string | null;
+  url: string | null;
+}
+
+export interface ChangeBriefing {
+  query: string;
+  summary: string | null;
+  locations: ChangeLocation[];
+  experts: ChangeExpert[];
+  decisions: DecisionHit[];
+  history: KnowledgeHit[];
+  docs_to_update: ChangeDocHit[];
+  test_gaps: string[];
+  provider: string | null;
+}
+
 export interface SearchResults {
   query: string;
   symbols: SymbolHit[];
@@ -567,5 +604,10 @@ export const api = {
     request<AskResponse>(`/api/v1/repositories/${repoId}/ask`, {
       method: "POST",
       body: JSON.stringify({ question }),
+    }),
+  changeBriefing: (repoId: number, query: string) =>
+    request<ChangeBriefing>(`/api/v1/repositories/${repoId}/change-briefing`, {
+      method: "POST",
+      body: JSON.stringify({ query }),
     }),
 };

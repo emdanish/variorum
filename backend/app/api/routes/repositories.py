@@ -36,6 +36,8 @@ from app.schemas import (
     AnalyzePrResponse,
     AskRequest,
     AskResponse,
+    ChangeBriefing,
+    ChangeBriefingRequest,
     Citation,
     ContradictionReport,
     DecisionResponse,
@@ -68,6 +70,7 @@ from app.schemas import (
     SnapshotResult,
     TrendsReport,
 )
+from app.services import change_briefing as change_briefing_svc
 from app.services import contradictions as contradictions_svc
 from app.services import decisions as decisions_svc
 from app.services import digest as digest_svc
@@ -879,6 +882,38 @@ async def ask(
         provider=result.provider,
         model=result.model,
     )
+
+
+@router.post("/{repo_id}/change-briefing", response_model=ChangeBriefing)
+async def change_briefing(
+    repo_id: int,
+    payload: ChangeBriefingRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ChangeBriefing:
+    """Pre-work briefing for an intended change: where the code lives, how risky
+    it is to touch, who to ask, why it's built that way, which docs will drift,
+    and where tests are missing. Deterministic core with a best-effort AI TL;DR."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    query = payload.query.strip()
+    briefing = change_briefing_svc.build_change_briefing(
+        db,
+        repo.id,
+        query,
+        embedder=get_embedding_service(),
+        repo_full_name=repo.full_name,
+        default_branch=repo.default_branch,
+    )
+    ai = get_ai_service()
+    try:
+        summary, provider = await change_briefing_svc.summarize(ai, briefing)
+        briefing["summary"] = summary
+        briefing["provider"] = provider
+    except (AllProvidersFailedError, ValueError) as exc:
+        # The structured briefing stands on its own; the TL;DR is optional.
+        logger.warning("change-briefing summary failed repo=%s: %s", repo.id, exc)
+
+    return ChangeBriefing(**briefing)
 
 
 def _guide_to_response(guide: RepositoryGuide) -> RepositoryGuideResponse:
