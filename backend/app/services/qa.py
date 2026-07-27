@@ -11,7 +11,7 @@ from app.ai.rag import top_k_by_cosine
 from app.ai.service import AIService
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models import CodeSymbol, DecisionEntry, KnowledgeEntry
+from app.models import CodeSymbol, DecisionEntry, Document, KnowledgeEntry
 from app.services.symbols import RETRIEVABLE_KINDS
 
 logger = get_logger("variorum.qa")
@@ -19,6 +19,7 @@ logger = get_logger("variorum.qa")
 MAX_ENTRIES = 8
 MAX_DECISIONS = 3  # synthesized decisions blended in alongside raw history
 MAX_CODE = 5  # code symbols blended in so answers can cite the actual code
+MAX_DOCS = 3  # documentation passages blended in
 MAX_BODY_CHARS = 600
 MIN_SIMILARITY = 0.4  # cosine floor to exclude clearly-unrelated vector hits
 
@@ -381,9 +382,99 @@ def retrieve_code(
     return out
 
 
+def retrieve_docs(
+    db: Session,
+    repository_id: int,
+    question: str,
+    *,
+    k: int = MAX_DOCS,
+    embedder: EmbeddingService | None = None,
+) -> list[Document]:
+    """Retrieve documentation relevant to a question — semantic (embedding cosine)
+    blended with full-text over title+body, keyword-only when embeddings are
+    unavailable. Only docs with stored body are considered."""
+    haystack = func.coalesce(Document.title, "") + " " + func.coalesce(Document.body, "")
+    tsv = func.to_tsvector("english", haystack)
+    tsq = func.websearch_to_tsquery("english", question)
+    keyword_hits = list(
+        db.execute(
+            select(Document)
+            .where(
+                Document.repository_id == repository_id,
+                Document.body.is_not(None),
+                tsv.op("@@")(tsq),
+            )
+            .order_by(func.ts_rank(tsv, tsq).desc())
+            .limit(k)
+        )
+        .scalars()
+        .all()
+    )
+    if not keyword_hits:
+        # ILIKE fallback (mirrors _keyword_retrieve) for partially-stemming phrasings.
+        words = re.findall(r"[A-Za-z0-9_]{3,}", question)[:6]
+        if words:
+            clauses = [haystack.ilike(f"%{w}%") for w in words]
+            keyword_hits = list(
+                db.execute(
+                    select(Document)
+                    .where(
+                        Document.repository_id == repository_id,
+                        Document.body.is_not(None),
+                        or_(*clauses),
+                    )
+                    .limit(k)
+                )
+                .scalars()
+                .all()
+            )
+    if embedder is None or not embedder.available:
+        return keyword_hits
+    query_vec = embedder.embed(question)
+    if not query_vec:
+        return keyword_hits
+
+    embedded = (
+        db.execute(
+            select(Document).where(
+                Document.repository_id == repository_id,
+                Document.embedding.is_not(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    vector_hits = top_k_by_cosine(
+        query_vec, embedded, lambda d: d.embedding, k=k, min_similarity=MIN_SIMILARITY
+    )
+    seen: set[int] = set()
+    out: list[Document] = []
+    for d in [*vector_hits, *keyword_hits]:
+        if d.id in seen:
+            continue
+        seen.add(d.id)
+        out.append(d)
+        if len(out) >= k:
+            break
+    return out
+
+
 def _entry_to_doc(e: KnowledgeEntry) -> _ContextDoc:
     return _ContextDoc(
         kind=e.kind.value, source_ref=e.source_ref, title=e.title, url=e.url, body=e.body
+    )
+
+
+def _document_to_doc(
+    d: Document, repo_full_name: str | None, default_branch: str
+) -> _ContextDoc:
+    url = (
+        f"https://github.com/{repo_full_name}/blob/{default_branch}/{d.path}"
+        if repo_full_name and d.path
+        else None
+    )
+    return _ContextDoc(
+        kind="document", source_ref=d.path, title=d.title, url=url, body=d.body
     )
 
 
@@ -435,18 +526,20 @@ async def answer_question(
     entries: list[KnowledgeEntry],
     decisions: list[DecisionEntry] | None = None,
     code: list[CodeSymbol] | None = None,
+    documents: list[Document] | None = None,
     *,
     repo_full_name: str | None = None,
     default_branch: str = "main",
 ) -> QAResult:
-    """Answer grounded in retrieved context. Blends code symbols, synthesized
-    decisions, and raw history entries when provided (all optional, so existing
-    history-only callers are unchanged). Code citations link to the exact lines
-    on GitHub."""
+    """Answer grounded in retrieved context. Blends code symbols, documentation,
+    synthesized decisions, and raw history entries when provided (all optional, so
+    existing history-only callers are unchanged). Code and doc citations link to
+    the source on GitHub."""
     docs = (
         [_entry_to_doc(e) for e in entries]
         + [_decision_to_doc(d) for d in (decisions or [])]
         + [_code_to_doc(s, repo_full_name, default_branch) for s in (code or [])]
+        + [_document_to_doc(d, repo_full_name, default_branch) for d in (documents or [])]
     )
     if not docs:
         return QAResult(

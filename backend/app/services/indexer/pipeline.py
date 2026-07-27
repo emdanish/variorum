@@ -11,6 +11,8 @@ from app.services.indexer.code_index import index_directory
 from app.services.indexer.docs import discover_documents
 from app.services.indexer.linker import link_documents
 
+_MAX_DOC_BODY = 20_000  # cap stored doc text so a row stays reasonable
+
 
 @dataclass
 class IndexResult:
@@ -72,6 +74,7 @@ def reindex_repository(db: Session, repo: Repository, root: Path) -> IndexResult
                 kind=DocumentKind.markdown,
                 title=doc.title,
                 content_hash=doc.content_hash,
+                body=(doc.content or "")[:_MAX_DOC_BODY] or None,
             )
         )
     db.flush()

@@ -83,7 +83,13 @@ from app.services import schedule as schedule_svc
 from app.services import search as search_svc
 from app.services import slack as slack_svc
 from app.services.github.client import GitHubClient
-from app.services.qa import answer_question, retrieve, retrieve_code, retrieve_decisions
+from app.services.qa import (
+    answer_question,
+    retrieve,
+    retrieve_code,
+    retrieve_decisions,
+    retrieve_docs,
+)
 from app.workers.indexing import run_index_job
 from app.workers.ingest import run_ingest_history_job
 from app.workers.pr_analysis import run_pr_analysis_job
@@ -856,6 +862,7 @@ async def ask(
     entries = retrieve(db, repo.id, question, embedder=embedder)
     decisions = retrieve_decisions(db, repo.id, question, embedder=embedder)
     code = retrieve_code(db, repo.id, question, embedder=embedder)
+    documents = retrieve_docs(db, repo.id, question, embedder=embedder)
     try:
         result = await answer_question(
             ai,
@@ -863,6 +870,7 @@ async def ask(
             entries,
             decisions=decisions,
             code=code,
+            documents=documents,
             repo_full_name=repo.full_name,
             default_branch=repo.default_branch,
         )

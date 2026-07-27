@@ -1081,8 +1081,22 @@ endpoints wire it; dismiss/restore toasts explain the behavior. ADR
 [`0008`](./docs/adr/0008-finding-feedback-loop.md).
 
 **Status:** 260 backend tests (+5), mypy + ruff clean; frontend tsc + lint clean,
-production build passes. Phase 5 Tier 3: actionable Overview + feedback loop done;
-document-body indexing remains the one open enhancement.
+production build passes. Phase 5 Tier 3: actionable Overview + feedback loop done.
+
+### Tier 3 — document-body indexing (complete)
+
+The RAG corpus is now complete: **documentation joins code, history, and
+decisions**. `Document` gained a stored `body` (truncated) and an `embedding`
+(migration `c5e0a9b7d132`); the indexer stores the doc text it already reads,
+`services/documents.py` embeds title+body (run after every index job), and
+`qa.retrieve_docs` (semantic ⊕ full-text with an ILIKE fallback) blends
+documentation into the cited answer — **doc citations link to the file on
+GitHub**. The Ask UI shows a "Docs" source chip. So "how does X work?" can now
+answer from the actual documentation passage, not just link to a file.
+
+**Status:** 267 backend tests (+7), mypy + ruff clean; frontend tsc + lint clean,
+production build passes. Phase 5 complete — the code-aware "understand and change
+safely" vision is fully delivered (Tiers 1–3).
 
 ---
 

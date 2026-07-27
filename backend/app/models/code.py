@@ -41,6 +41,11 @@ class Document(Base, TimestampMixin):
     kind: Mapped[DocumentKind] = mapped_column(default=DocumentKind.markdown, nullable=False)
     title: Mapped[str | None] = mapped_column(String(512))
     content_hash: Mapped[str | None] = mapped_column(String(64))
+    # Stored documentation text (truncated), so the Q&A can retrieve and cite the
+    # actual passages — not just link to the file.
+    body: Mapped[str | None] = mapped_column(Text)
+    # Semantic-search embedding of title + body (JSONB + in-process cosine).
+    embedding: Mapped[list[float] | None] = mapped_column(JSONB)
 
 
 class DocCodeLink(Base, TimestampMixin):

@@ -7,6 +7,7 @@ import {
   Code2,
   Database,
   ExternalLink,
+  FileText,
   GitCommit,
   GitPullRequest,
   Lightbulb,
@@ -34,6 +35,7 @@ const SUGGESTIONS = [
 
 const KIND_META: Record<string, { icon: LucideIcon; label: string }> = {
   code: { icon: Code2, label: "Code" },
+  document: { icon: FileText, label: "Docs" },
   decision: { icon: Lightbulb, label: "Decision" },
   pull_request: { icon: GitPullRequest, label: "PR" },
   commit: { icon: GitCommit, label: "Commit" },
@@ -42,7 +44,7 @@ const KIND_META: Record<string, { icon: LucideIcon; label: string }> = {
 };
 
 function sourceText(c: Citation): string {
-  if (c.kind === "code") return c.source_ref; // path[:line]
+  if (c.kind === "code" || c.kind === "document") return c.source_ref; // path[:line]
   if (c.kind === "commit") return c.source_ref.slice(0, 7);
   if (c.kind === "pull_request") return `#${c.source_ref}`;
   if (c.kind === "issue") return `#${c.source_ref}`;
@@ -55,7 +57,7 @@ function SourceChip({ c }: { c: Citation }) {
   // Code/commit/PR/issue refs are short identifiers or long paths where the
   // click-through matters more than the tail — truncate those. A decision's
   // value is its title, so let it wrap and show in full.
-  const isCode = c.kind === "code";
+  const isCode = c.kind === "code" || c.kind === "document";
   const inner = (
     <span
       className="inline-flex max-w-full items-start gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs transition-colors hover:border-primary/40 hover:bg-accent"

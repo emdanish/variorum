@@ -86,11 +86,14 @@ def _run(
         embedded = 0
         try:
             from app.ai.embeddings import get_embedding_service
+            from app.services.documents import embed_missing_documents
             from app.services.symbols import embed_missing_symbols
 
-            embedded = embed_missing_symbols(db, repo.id, get_embedding_service())
-        except Exception as exc:  # noqa: BLE001 — code embeddings are best-effort
-            logger.warning("symbol embedding failed repo=%s: %s", repo.full_name, exc)
+            embedder = get_embedding_service()
+            embedded = embed_missing_symbols(db, repo.id, embedder)
+            embed_missing_documents(db, repo.id, embedder)
+        except Exception as exc:  # noqa: BLE001 — code/doc embeddings are best-effort
+            logger.warning("embedding step failed repo=%s: %s", repo.full_name, exc)
 
         logger.info(
             "indexed repo=%s files=%d symbols=%d docs=%d links=%d embedded=%d",
