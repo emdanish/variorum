@@ -14,8 +14,8 @@ depend on exclusively. We have access to multiple keys across multiple vendors
 
 Application code depends only on the `AIService` facade and the `AIProvider`
 interface — never on a concrete vendor SDK. A `ProviderManager` holds an ordered
-list of providers and tries them in turn: **Gemini key 1 → Gemini key 2 →
-DeepSeek → Perplexity**. Unconfigured providers are skipped; a provider that
+list of providers and tries them in turn: **Perplexity → DeepSeek → Gemini key 1 →
+Gemini key 2**. Unconfigured providers are skipped; a provider that
 errors (quota, auth, transient, bad request) is logged and the next one is tried.
 If all fail, a single aggregate error is raised.
 
