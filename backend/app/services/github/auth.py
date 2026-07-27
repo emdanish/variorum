@@ -38,9 +38,26 @@ class GitHubAppAuth:
         if self._private_key is not None:
             return self._private_key
 
-        b64 = self._settings.github_app_private_key_base64
-        if b64:
-            self._private_key = base64.b64decode(b64).decode("utf-8")
+        configured = self._settings.github_app_private_key_base64.strip()
+        if configured:
+            # Tolerate two common misconfigurations of the *_BASE64 env var:
+            #  - a PEM pasted in directly (starts with "-----BEGIN") — use as-is;
+            #  - whitespace/newlines an env editor injected into the base64 —
+            #    strip them, then fix any lost "=" padding so a value that only
+            #    lost its trailing padding still decodes.
+            if "-----BEGIN" in configured:
+                self._private_key = configured
+                return self._private_key
+            compact = "".join(configured.split())
+            padded = compact + "=" * (-len(compact) % 4)
+            try:
+                self._private_key = base64.b64decode(padded).decode("utf-8")
+            except (ValueError, UnicodeDecodeError) as exc:
+                raise GitHubConfigError(
+                    "GITHUB_APP_PRIVATE_KEY_BASE64 is not valid base64 (it looks "
+                    "truncated or corrupted). Re-encode the .pem to a single line "
+                    "and set the full value. See README/SETUP."
+                ) from exc
             return self._private_key
 
         path = self._settings.github_app_private_key_path
