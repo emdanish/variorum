@@ -22,6 +22,7 @@ from app.models.github import GitHubInstallation, Repository
 from app.models.knowledge import KnowledgeEntry
 from app.models.metrics import FileChange
 from app.models.orientation import RepositoryGuide
+from app.models.schedule import DigestSchedule
 from app.models.token import ApiToken
 from app.models.user import User
 
@@ -30,6 +31,7 @@ __all__ = [
     "ApiToken",
     "CodeSymbol",
     "DecisionEntry",
+    "DigestSchedule",
     "DocCodeLink",
     "Document",
     "DocumentKind",

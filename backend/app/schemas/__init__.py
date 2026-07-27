@@ -45,6 +45,20 @@ class SlackSendResult(BaseModel):
     sent: bool
 
 
+class DigestScheduleConfig(BaseModel):
+    day_of_week: int = Field(ge=0, le=6)  # 0 = Monday … 6 = Sunday
+    hour: int = Field(ge=0, le=23)  # UTC
+    enabled: bool = True
+
+
+class DigestScheduleResponse(BaseModel):
+    configured: bool
+    day_of_week: int | None = None
+    hour: int | None = None
+    enabled: bool = False
+    last_sent_at: datetime | None = None
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

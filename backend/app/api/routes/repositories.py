@@ -38,6 +38,8 @@ from app.schemas import (
     DecisionResponse,
     DecisionSource,
     DigestReport,
+    DigestScheduleConfig,
+    DigestScheduleResponse,
     DocCoverageReport,
     FindingResponse,
     GuideArea,
@@ -67,6 +69,7 @@ from app.services import insights as insights_svc
 from app.services import metrics as metrics_svc
 from app.services import orientation as orientation_svc
 from app.services import pr_impact as pr_impact_svc
+from app.services import schedule as schedule_svc
 from app.services import search as search_svc
 from app.services import slack as slack_svc
 from app.services.github.client import GitHubClient
@@ -587,6 +590,58 @@ async def send_digest_to_slack(
             detail="Slack rejected the message. Check the webhook URL.",
         ) from exc
     return SlackSendResult(sent=True)
+
+
+@router.get("/{repo_id}/digest/schedule", response_model=DigestScheduleResponse)
+def get_digest_schedule(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DigestScheduleResponse:
+    repo = _get_owned_repo(db, user.id, repo_id)
+    row = schedule_svc.get_schedule(db, repo.id)
+    if row is None:
+        return DigestScheduleResponse(configured=False)
+    return DigestScheduleResponse(
+        configured=True,
+        day_of_week=row.day_of_week,
+        hour=row.hour,
+        enabled=row.enabled,
+        last_sent_at=row.last_sent_at,
+    )
+
+
+@router.put("/{repo_id}/digest/schedule", response_model=DigestScheduleResponse)
+def set_digest_schedule(
+    repo_id: int,
+    payload: DigestScheduleConfig,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DigestScheduleResponse:
+    """Set the weekly cadence for auto-delivering this repo's digest to Slack (UTC)."""
+    repo = _get_owned_repo(db, user.id, repo_id)
+    row = schedule_svc.set_schedule(
+        db, repo.id, day_of_week=payload.day_of_week, hour=payload.hour, enabled=payload.enabled
+    )
+    return DigestScheduleResponse(
+        configured=True,
+        day_of_week=row.day_of_week,
+        hour=row.hour,
+        enabled=row.enabled,
+        last_sent_at=row.last_sent_at,
+    )
+
+
+@router.delete(
+    "/{repo_id}/digest/schedule", status_code=status.HTTP_204_NO_CONTENT, response_model=None
+)
+def delete_digest_schedule(
+    repo_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    repo = _get_owned_repo(db, user.id, repo_id)
+    schedule_svc.delete_schedule(db, repo.id)
 
 
 @router.get("/{repo_id}/contradictions/{pr_number}", response_model=ContradictionReport)

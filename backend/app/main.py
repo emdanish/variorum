@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -8,12 +13,54 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.ai.service import get_ai_service
 from app.api.router import api_router
 from app.api.routes import webhooks
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.ratelimit import rate_limit_middleware
 from app.schemas import HealthResponse
 
 logger = get_logger("variorum")
+
+
+async def _scheduler_loop(interval_seconds: int) -> None:
+    """Tick the weekly-digest scheduler forever. Each tick opens its own session
+    and is fully isolated — a failing tick never stops the loop."""
+    from app.db.session import SessionLocal
+    from app.services.schedule import run_due_digests
+
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            db = SessionLocal()
+            try:
+                sent = await run_due_digests(db, datetime.now(UTC))
+                if sent:
+                    logger.info("scheduler tick sent %d digest(s)", sent)
+            finally:
+                db.close()
+        except Exception:  # noqa: BLE001 — a bad tick must not kill the loop
+            logger.exception("digest scheduler tick failed")
+
+
+def _make_lifespan(settings: Settings):
+    @contextlib.asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        task: asyncio.Task[None] | None = None
+        if settings.scheduler_enabled:
+            task = asyncio.create_task(
+                _scheduler_loop(settings.scheduler_interval_seconds)
+            )
+            logger.info(
+                "digest scheduler started (every %ds)", settings.scheduler_interval_seconds
+            )
+        try:
+            yield
+        finally:
+            if task is not None:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+    return lifespan
 
 # Baseline hardening headers applied to every response. HSTS is added
 # separately, and only in production, since it should never be sent over http.
@@ -42,6 +89,7 @@ def create_app() -> FastAPI:
         title=f"{settings.app_name} API",
         version="0.0.1",
         description="Engineering knowledge infrastructure — backend API.",
+        lifespan=_make_lifespan(settings),
     )
 
     app.add_middleware(

@@ -25,6 +25,14 @@ export interface SlackStatus {
   configured: boolean;
 }
 
+export interface DigestSchedule {
+  configured: boolean;
+  day_of_week: number | null;
+  hour: number | null;
+  enabled: boolean;
+  last_sent_at: string | null;
+}
+
 export interface Repository {
   id: number;
   installation_id: number;
@@ -471,6 +479,15 @@ export const api = {
     request<{ sent: boolean }>(`/api/v1/repositories/${id}/digest/slack?days=${days}`, {
       method: "POST",
     }),
+  digestSchedule: (id: number) =>
+    request<DigestSchedule>(`/api/v1/repositories/${id}/digest/schedule`),
+  setDigestSchedule: (id: number, dayOfWeek: number, hour: number, enabled: boolean) =>
+    request<DigestSchedule>(`/api/v1/repositories/${id}/digest/schedule`, {
+      method: "PUT",
+      body: JSON.stringify({ day_of_week: dayOfWeek, hour, enabled }),
+    }),
+  deleteDigestSchedule: (id: number) =>
+    request<void>(`/api/v1/repositories/${id}/digest/schedule`, { method: "DELETE" }),
   contradictions: (id: number, prNumber: number) =>
     request<ContradictionReport>(`/api/v1/repositories/${id}/contradictions/${prNumber}`),
   teams: () => request<TeamInsights[]>("/api/v1/teams"),

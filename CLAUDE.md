@@ -162,6 +162,7 @@ powershell -ExecutionPolicy Bypass -File scripts/start-all.ps1
 ### Gotchas (learned the hard way)
 - **Never run `next build` while `next dev` is running** — it corrupts the shared `.next`. Verify with `tsc --noEmit` + `npm run lint`.
 - After editing `.env`, **restart the backend** (settings are read once at startup).
+- The **weekly-digest scheduler** is an in-process FastAPI-lifespan loop (`app/main.py` → `services/schedule.py`), gated by `SCHEDULER_ENABLED` (default on; off in tests). It only sends when a repo has a `DigestSchedule` due *and* the owner has a Slack webhook. Single-instance only — a durable scheduler is the production upgrade (same posture as `BackgroundTasks`).
 - Shared PG enum in a new table's migration → set `create_type=False`.
 - Free-tier AI keys reject some model names (404) and rate-limit (429/503) — rely on the fallback chain; re-verify models with `check_ai.py`.
 - Don't import `test_*`-named functions into test modules (pytest collects them) — alias.

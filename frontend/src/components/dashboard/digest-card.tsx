@@ -11,6 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, type DigestReport } from "@/lib/api";
 import { cn, ghBlobUrl } from "@/lib/utils";
 
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
 function healthColor(score: number): string {
   if (score >= 80) return "text-success";
   if (score >= 50) return "text-warning";
@@ -39,6 +41,10 @@ export function DigestCard({
   const [digest, setDigest] = useState<DigestReport | null>(null);
   const [slackReady, setSlackReady] = useState(false);
   const [sending, setSending] = useState(false);
+  const [schedEnabled, setSchedEnabled] = useState(false);
+  const [schedDay, setSchedDay] = useState(0);
+  const [schedHour, setSchedHour] = useState(9);
+  const [schedSaving, setSchedSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -52,10 +58,34 @@ export function DigestCard({
       .slackStatus()
       .then((s) => active && setSlackReady(s.configured))
       .catch(() => active && setSlackReady(false));
+    api
+      .digestSchedule(repoId)
+      .then((sc) => {
+        if (!active || !sc.configured) return;
+        setSchedEnabled(sc.enabled);
+        if (sc.day_of_week !== null) setSchedDay(sc.day_of_week);
+        if (sc.hour !== null) setSchedHour(sc.hour);
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
   }, [repoId]);
+
+  const saveSchedule = async (enabled: boolean) => {
+    setSchedSaving(true);
+    try {
+      await api.setDigestSchedule(repoId, schedDay, schedHour, enabled);
+      setSchedEnabled(enabled);
+      toast.success(
+        enabled ? `Weekly digest scheduled (${DAYS[schedDay]} ${schedHour}:00 UTC)` : "Schedule paused",
+      );
+    } catch (e) {
+      toast.error("Couldn't save schedule", { description: (e as Error).message });
+    } finally {
+      setSchedSaving(false);
+    }
+  };
 
   const sendToSlack = async () => {
     setSending(true);
@@ -185,6 +215,64 @@ export function DigestCard({
             </Link>
           )}
         </div>
+        {slackReady && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs">
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <CalendarClock className="h-3.5 w-3.5" /> Auto-send weekly
+            </span>
+            <select
+              aria-label="Day of week"
+              value={schedDay}
+              onChange={(e) => setSchedDay(Number(e.target.value))}
+              className="rounded-md border border-border bg-background px-1.5 py-1"
+            >
+              {DAYS.map((d, i) => (
+                <option key={d} value={i}>
+                  {d}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Hour (UTC)"
+              value={schedHour}
+              onChange={(e) => setSchedHour(Number(e.target.value))}
+              className="rounded-md border border-border bg-background px-1.5 py-1"
+            >
+              {Array.from({ length: 24 }, (_, h) => (
+                <option key={h} value={h}>
+                  {String(h).padStart(2, "0")}:00
+                </option>
+              ))}
+            </select>
+            <span className="text-muted-foreground">UTC</span>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={schedSaving}
+                onClick={() => void saveSchedule(true)}
+              >
+                {schedSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                {schedEnabled ? "Update" : "Schedule"}
+              </Button>
+              {schedEnabled && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={schedSaving}
+                  onClick={() => void saveSchedule(false)}
+                >
+                  Pause
+                </Button>
+              )}
+            </div>
+            {schedEnabled && (
+              <span className="w-full text-[10px] text-success">
+                Scheduled · {DAYS[schedDay]} {String(schedHour).padStart(2, "0")}:00 UTC
+              </span>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

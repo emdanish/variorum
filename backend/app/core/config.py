@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # suite so repeated calls don't trip the limiter.
     rate_limit_enabled: bool = True
 
+    # In-process weekly-digest scheduler (Slack delivery). Runs a background loop
+    # that ticks every `scheduler_interval_seconds`. Disabled in the test suite.
+    scheduler_enabled: bool = True
+    scheduler_interval_seconds: int = 900
+
     # SQLAlchemy connection pool sizing (per process). Tune against the
     # database's max_connections and the number of running replicas.
     db_pool_size: int = 5

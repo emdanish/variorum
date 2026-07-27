@@ -935,7 +935,32 @@ repeated runs update one comment instead of stacking.
   ADR [`0004`](./docs/adr/0004-pr-native-briefing-comments.md).
 
 **Status:** 226 backend tests (+10), mypy + ruff clean; frontend tsc + lint
-clean, production build passes. (4A — scheduled digests — is next.)
+clean, production build passes.
+
+### 4A — scheduled weekly digests (complete)
+
+Digests can now be delivered to Slack on a weekly cadence, not just on-demand.
+
+- **`DigestSchedule`** model (migration `e2c8f4b19d70`, one row per repo:
+  UTC day-of-week + hour, `enabled`, `last_sent_at`).
+- **`services/schedule.py`:** CRUD + `due_schedules` (matches UTC weekday+hour,
+  de-duped by a 12h resend window) + `run_due_digests` (owner-scoped; builds the
+  digest, sends to the owner's Slack webhook, stamps `last_sent_at`; best-effort
+  per schedule). Injectable `sender` for tests — no live Slack traffic.
+- **In-process scheduler:** a FastAPI-lifespan background loop ticks every
+  `SCHEDULER_INTERVAL_SECONDS` (default 900) and runs due digests. Gated by
+  `SCHEDULER_ENABLED` (default true; off in the test suite). No new dependency —
+  consistent with the BackgroundTasks-for-MVP posture; a durable scheduler is the
+  documented production upgrade.
+- **Endpoints:** `GET/PUT/DELETE /repositories/{id}/digest/schedule`.
+- **Frontend:** a weekly-schedule control (day + hour + Schedule/Pause) on the
+  digest card, shown once Slack is connected.
+- Sending remains automated *delivery of a recap* only — never an automated code
+  or PR action — so the human-review gate is intact; $0 (Slack webhooks + free AI
+  fallback).
+
+**Status:** 233 backend tests (+7), mypy + ruff clean; frontend tsc + lint clean,
+production build passes. Phase 4 tracks 4C + 4A delivered.
 
 ---
 
