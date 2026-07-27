@@ -404,6 +404,7 @@ export interface Finding {
   pr_number: number | null;
   evidence: Record<string, unknown>;
   created_at: string;
+  repository_id?: number; // attached client-side when aggregating across repos
 }
 
 export interface GitHubAppStatus {
@@ -441,6 +442,7 @@ export interface RiskFinding {
   has_tests: boolean | null;
   untested_scenarios: string[];
   created_at: string;
+  repository_id?: number; // attached client-side when aggregating across repos
 }
 
 export interface KnowledgeStats {

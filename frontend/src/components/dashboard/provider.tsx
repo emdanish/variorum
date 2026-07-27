@@ -53,8 +53,17 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       Promise.all(repoList.map((r) => api.findings(r.id).catch(() => [] as Finding[]))),
       Promise.all(repoList.map((r) => api.riskFindings(r.id).catch(() => [] as RiskFinding[]))),
     ]);
-    setFindings(driftLists.flat());
-    setRisk(riskLists.flat());
+    // Tag each finding with its repo so cross-repo views can deep-link back.
+    setFindings(
+      driftLists.flatMap((list, i) =>
+        list.map((f) => ({ ...f, repository_id: repoList[i].id })),
+      ),
+    );
+    setRisk(
+      riskLists.flatMap((list, i) =>
+        list.map((f) => ({ ...f, repository_id: repoList[i].id })),
+      ),
+    );
   }, []);
 
   const reloadAll = useCallback(async () => {

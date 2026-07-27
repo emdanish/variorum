@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { ActivityArea, Bars, CHART_COLORS, Donut } from "@/components/dashboard/charts";
+import { NeedsAttention } from "@/components/dashboard/needs-attention";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { useDashboard } from "@/components/dashboard/provider";
 import { Badge, severityTone } from "@/components/ui/badge";
@@ -77,7 +78,7 @@ export default function OverviewPage() {
     <div className="animate-fade-in">
       <PageHeader
         title="Overview"
-        description="Documentation health, risk, and knowledge across your connected repositories."
+        description="What needs your attention across your connected repositories — and the numbers behind it."
         actions={
           installUrl && (
             <a href={installUrl}>
@@ -88,6 +89,8 @@ export default function OverviewPage() {
           )
         }
       />
+
+      <NeedsAttention />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Repositories" value={repos.length} icon={BookMarked} sub={`${indexed} indexed`} accent />

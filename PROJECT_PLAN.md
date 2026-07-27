@@ -1057,6 +1057,17 @@ make and get one cited, actionable pre-work briefing — no PR required.
 production build passes. Pre-work Change Briefing and post-hoc PR Impact Briefing
 are separate surfaces for the two moments.
 
+### 4D-adjacent — actionable Overview (complete)
+
+The Overview led with donut/bar charts — stats, not next steps. Added a
+**"Needs your attention"** command-center band at the very top: a prioritized,
+one-click list synthesized (deterministically, no AI) from unacknowledged alerts,
+open high-risk findings, unindexed repos, and open doc-drift — each row linking
+straight to where you act, with inline acknowledge for alerts. The charts remain
+below as "the numbers." Findings are now tagged with their `repository_id` client-
+side so cross-repo views can deep-link back. Frontend-only; tsc + lint + build
+clean.
+
 ---
 
 ## Environment, skills & tooling
