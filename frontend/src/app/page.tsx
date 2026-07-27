@@ -64,10 +64,10 @@ function Hero() {
         </FadeIn>
         <FadeIn delay={0.1}>
           <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-muted-foreground">
-            Variorum learns your repository — the code, the docs, and the decisions behind them — and
-            answers &ldquo;how does this work?&rdquo; and &ldquo;what will I break?&rdquo; with
-            citations you can click. It keeps docs in sync and flags risky changes, so context never
-            walks out the door.
+            Variorum learns your repository: the code, the docs, and the decisions behind them. Ask
+            how something works, or what a change is likely to break, and the answer comes back with
+            citations you can click. It keeps your docs in sync and flags risky changes, so the
+            context doesn&apos;t walk out the door when people do.
           </p>
         </FadeIn>
         <FadeIn delay={0.15}>
@@ -100,7 +100,7 @@ function Hero() {
 
 const TRUST = [
   { icon: Check, label: "Every answer cited" },
-  { icon: ShieldCheck, label: "Human-in-the-loop — never auto-merges" },
+  { icon: ShieldCheck, label: "Human in the loop, never auto-merges" },
   { icon: GitPullRequest, label: "No new tool to learn" },
   { icon: Sparkles, label: "Free to start" },
 ];
@@ -123,7 +123,7 @@ const PAINS = [
   { icon: Boxes, title: "New code is a maze", body: "Every change starts with an hour of grep, git blame, and “who owns this?” in Slack." },
   { icon: FileText, title: "Docs go stale", body: "The code moved on; the README still describes last quarter's architecture." },
   { icon: Brain, title: "The “why” disappears", body: "The reason behind that workaround left with the engineer who wrote it." },
-  { icon: Clock, title: "Risk is invisible", body: "You find out a change was risky — untested, single-owner — only after it breaks." },
+  { icon: Clock, title: "Risk is invisible", body: "You only find out a change was risky, untested and owned by one person, after it has already broken." },
 ];
 
 function Problem() {
@@ -136,9 +136,9 @@ function Problem() {
             Your code is version-controlled. Your team&apos;s knowledge isn&apos;t.
           </h2>
           <p className="mt-4 text-muted-foreground">
-            The context around the code — how it fits together, why it&apos;s built this way, what&apos;s
-            fragile — is scattered across commits, PRs, and people&apos;s heads. It erodes as teams grow
-            and engineers move on.
+            The context around the code lives in scattered commits, old pull requests, and people&apos;s
+            heads. How it fits together and why it&apos;s built this way rarely gets written down, and what
+            does exist fades as the team grows and people move on.
           </p>
         </FadeIn>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -160,7 +160,7 @@ function Problem() {
 }
 
 // --------------------------------------------------------------------------- //
-// Core capabilities — three alternating storytelling rows with a visual each
+// Core capabilities: three alternating storytelling rows with a visual each
 // --------------------------------------------------------------------------- //
 
 function CoreCapabilities() {
@@ -171,7 +171,7 @@ function CoreCapabilities() {
           eyebrow="Ask the codebase"
           title="Get an answer, not a search result"
           points={[
-            "Ask in plain English — Variorum answers from the actual code, docs, PRs, and decisions.",
+            "Ask in plain English. Variorum answers from the actual code, docs, PRs, and decisions.",
             "Every answer cites its sources; click a citation to jump to the exact lines on GitHub.",
             "Onboarding drops from days of spelunking to minutes.",
           ]}
@@ -192,7 +192,7 @@ function CoreCapabilities() {
           eyebrow="Right where you work"
           title="Insights on the pull request, not in another tab"
           points={[
-            "Every PR gets an impact briefing — hotspots, owners, and missing tests — as one sticky comment.",
+            "Every PR gets an impact briefing (hotspots, owners, and missing tests) as one sticky comment.",
             "Documentation drift and test gaps come back as reviewable PRs. Variorum proposes; you merge.",
             "The comment updates in place as you push, so it's never a stale wall of duplicates.",
           ]}
@@ -204,7 +204,7 @@ function CoreCapabilities() {
 }
 
 // --------------------------------------------------------------------------- //
-// Slack — insights are delivered, not dashboards you must remember to open
+// Slack: insights are delivered, not dashboards you must remember to open
 // --------------------------------------------------------------------------- //
 
 function SlackSection() {
@@ -219,13 +219,13 @@ function SlackSection() {
             The most reliable dashboard is the one you never have to open
           </h2>
           <p className="mt-4 text-muted-foreground">
-            Health only helps if someone looks. Variorum sends a weekly recap and the alerts that
-            can&apos;t wait to the channel your team already lives in — so a health drop or a new
-            critical hotspot reaches you the day it happens, not the week you next remember to check.
+            Health only helps if someone looks. Variorum sends a weekly recap, plus the alerts that
+            can&apos;t wait, to the channel your team already lives in. A health drop or a new critical
+            hotspot reaches you the day it happens, not the week you next remember to check.
           </p>
           <ul className="mt-6 space-y-3">
             {[
-              "A weekly digest — health, new drift and risk, top hotspots — on the day and time you pick.",
+              "A weekly digest covering health, new drift and risk, and the top hotspots, on the day and time you pick.",
               "Connect once with an incoming webhook; set the cadence per repository.",
               "Send any repository's digest to Slack on demand, straight from the dashboard.",
             ].map((p) => (
@@ -265,7 +265,7 @@ function SlackVisual() {
             <span className="text-xs text-muted-foreground">9:00 AM</span>
           </div>
           <p className="mt-1 text-sm text-foreground">
-            🟡 <span className="font-semibold">acme/payments</span> — health 61/100, last 7 days
+            🟡 <span className="font-semibold">acme/payments</span> · health 61/100 · last 7 days
           </p>
           <div className="mt-2 space-y-1 text-xs text-muted-foreground">
             <p>• 2 new doc-drift · 1 new test-risk · 3 knowledge added · 2 single-owner modules</p>
@@ -407,15 +407,15 @@ function Row({ tone, left, right }: { tone: "danger" | "warning" | "outline"; le
 }
 
 // --------------------------------------------------------------------------- //
-// Feature grid — the full surface, each framed as a concrete win
+// Feature grid: the full surface, each framed as a concrete win
 // --------------------------------------------------------------------------- //
 
 const FEATURES = [
-  { icon: FileText, title: "Documentation Intelligence", body: "When a PR changes code, Variorum detects the docs it left behind and opens a fix PR — with evidence for every claim. Docs stay true without the chore." },
-  { icon: ShieldCheck, title: "Testing Intelligence", body: "Each change gets a risk score and a list of scenarios that look untested — and Variorum can open a test PR for review, so gaps get caught before they ship." },
+  { icon: FileText, title: "Documentation Intelligence", body: "When a PR changes code, Variorum spots the docs it left behind and opens a fix PR, with evidence for every claim. Your docs stay honest and nobody has to babysit them." },
+  { icon: ShieldCheck, title: "Testing Intelligence", body: "Each change gets a risk score and a list of scenarios that look untested. Variorum can open a test PR for review, so those gaps get caught before they ship." },
   { icon: Bell, title: "Digests & alerts", body: "A weekly recap of drift, risk, and knowledge lands in Slack; health drops and new critical hotspots page you the moment they appear." },
-  { icon: Users, title: "Portfolio & expertise", body: "See knowledge health across every repo and who actually knows each area — so bus-factor-of-one risks surface before someone leaves." },
-  { icon: Boxes, title: "Codebase understanding", body: "A structural map of files, functions, and classes — and how documentation relates to code — refreshed automatically as you push." },
+  { icon: Users, title: "Portfolio & expertise", body: "See knowledge health across every repo, and who actually knows each area, so a bus factor of one turns up before that person hands in their notice." },
+  { icon: Boxes, title: "Codebase understanding", body: "A structural map of your files, functions, and classes, plus how the documentation relates to the code. It refreshes on its own every time you push." },
   { icon: GitPullRequest, title: "Fits your PR flow", body: "One analysis per pull request, posted where reviewers already work. No dashboards to babysit, no workflow to change." },
 ];
 
@@ -449,8 +449,8 @@ function Features() {
 
 const STEPS = [
   { n: "01", icon: Github, title: "Connect a repository", body: "Install the GitHub App and pick the repositories you want Variorum to learn." },
-  { n: "02", icon: Boxes, title: "It learns your repo", body: "Variorum maps the code, reads the docs, and ingests the history behind them — then stays fresh on every push." },
-  { n: "03", icon: Sparkles, title: "Ask and plan", body: "Ask how anything works, or plan a change and see what it touches — all cited." },
+  { n: "02", icon: Boxes, title: "It learns your repo", body: "Variorum maps the code, reads the docs, and ingests the history behind them. From then on it stays fresh on every push." },
+  { n: "03", icon: Sparkles, title: "Ask and plan", body: "Ask how anything works, or plan a change and see what it touches. It's all cited." },
   { n: "04", icon: GitPullRequest, title: "Review on your PRs", body: "Briefings, drift fixes, and test gaps arrive on the pull request. You review and merge." },
 ];
 
@@ -495,9 +495,9 @@ function Differentiator() {
             A coding assistant writes the next line. Variorum remembers the last thousand.
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-            Variorum doesn&apos;t generate your code. It builds the durable, cited memory around it —
-            the how, the why, and the risk — and surfaces it at the moment you need it. It proposes;
-            your team always decides.
+            Variorum doesn&apos;t generate your code. It builds a durable, cited memory around it (the
+            how, the why, and the risk) and puts that in front of you at the moment you need it. It
+            proposes; your team always decides.
           </p>
         </FadeIn>
       </div>
@@ -577,7 +577,7 @@ function Footer() {
             <Logo />
             <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
               The engineering memory layer for software teams. Understand any codebase, change it
-              safely, and keep documentation honest — with citations for everything.
+              safely, and keep documentation honest, with citations for everything.
             </p>
           </div>
 
