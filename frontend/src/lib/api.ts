@@ -474,18 +474,60 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BACKEND_URL}${path}`, {
-    ...init,
-    credentials: "include",
-    cache: "no-store",
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-  });
-  if (!res.ok) {
-    throw new ApiError(res.status, `Request failed: ${res.status} ${path}`);
+// Friendly fallbacks when the backend didn't send a usable `detail`. Users must
+// never see "Internal Server Error", "undefined", "null", or a raw fetch error.
+const FRIENDLY_ERROR: Record<number, string> = {
+  0: "Couldn't reach Variorum. Check your connection and try again.",
+  400: "That request wasn't valid. Please check your input and try again.",
+  401: "Your session has expired. Please sign in again.",
+  403: "You don't have access to that resource.",
+  404: "We couldn't find what you were looking for.",
+  409: "That conflicts with the current state — refresh and try again.",
+  429: "Too many requests. Please slow down and try again.",
+  500: "Something went wrong on our end. Please try again.",
+  502: "The AI or GitHub service is temporarily unavailable. Please try again.",
+  503: "The service is temporarily unavailable. Please try again.",
+};
+
+const _UNUSABLE = /^\s*(internal server error|undefined|null|error|bad gateway)\s*$/i;
+
+function friendlyError(status: number, detail?: unknown): string {
+  if (typeof detail === "string" && detail.trim() && !_UNUSABLE.test(detail)) {
+    return detail.trim();
   }
+  return FRIENDLY_ERROR[status] ?? "Something went wrong. Please try again.";
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND_URL}${path}`, {
+      ...init,
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    });
+  } catch {
+    // Network failure / server unreachable — never surface the raw TypeError.
+    throw new ApiError(0, friendlyError(0));
+  }
+
+  if (!res.ok) {
+    let detail: unknown;
+    try {
+      detail = (await res.json())?.detail;
+    } catch {
+      /* error body wasn't JSON — fall through to the friendly fallback */
+    }
+    throw new ApiError(res.status, friendlyError(res.status, detail));
+  }
+
   if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new ApiError(res.status, "Variorum returned an unexpected response. Please try again.");
+  }
 }
 
 export const loginUrl = `${BACKEND_URL}/api/v1/auth/github/login`;

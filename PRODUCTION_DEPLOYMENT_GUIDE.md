@@ -49,8 +49,10 @@ docker run --env-file .env -e PORT=8000 -e WEB_CONCURRENCY=2 -p 8000:8000 varior
   instance. For multiple replicas, run `alembic upgrade head` once as a separate
   release step and remove it from the entrypoint to avoid concurrent-migration
   races.
-- **Health checks:** wire liveness to `GET /health` and readiness to
-  `GET /api/v1/system/status` (reports DB + AI + GitHub App).
+- **Health checks:** liveness → `GET /health` (200 if the process is up);
+  readiness → `GET /health/ready` (**200 only when the database is reachable,
+  503 otherwise** — safe for a plain HTTP uptime check). `GET /api/v1/system/status`
+  is the rich JSON status (DB + AI + GitHub App) for dashboards.
 - **Workers/pooling:** tune `WEB_CONCURRENCY` and the DB pool (`DB_POOL_SIZE`,
   `DB_MAX_OVERFLOW`, `DB_POOL_RECYCLE`) against your Postgres `max_connections`
   (roughly `replicas × workers × pool_size` connections).
@@ -100,7 +102,29 @@ Optional (safe defaults): `RATE_LIMIT_ENABLED`, `PGVECTOR_ENABLED`, `DB_POOL_*`,
   headers ship via `next.config.mjs`.
 - After changing backend URL env, **redeploy** so the value is re-baked.
 
-## 5. Scaling notes (post-launch)
+## 5. Monitoring & alerting
+
+Minimum viable, $0. Two hooks: a readiness probe and structured logs.
+
+- **Uptime + DB/backend down:** point a free uptime monitor (UptimeRobot,
+  BetterStack free tier, or your platform's built-in check) at
+  `GET /health/ready` on a 1–5 min interval. It returns **503 when the database
+  is unreachable or the process is down**, so a plain HTTP check alerts you.
+- **Alertable log signals** — each critical failure emits a greppable line;
+  forward stdout to your platform's log drain and alert on these:
+  - Backend crash / unhandled error → `logger.exception` `"unhandled error on …"` (ERROR).
+  - **AI fully down** (all providers failed) → `"ai all providers failed …"` (ERROR);
+    per-provider fallbacks log `"ai provider failed …"` (WARNING).
+  - GitHub API failure → worker/endpoint WARNING logs (e.g. `"pr analysis failed …"`,
+    `"… GitHub request failed"`).
+  - Database error → the readiness probe logs `"readiness check failed …"`, and any
+    unhandled DB error surfaces via the catch-all ERROR above.
+- **Optional next step (not installed, to stay $0/no-dep):** Sentry has a free
+  tier; adding `sentry-sdk`'s FastAPI integration gives error aggregation and
+  alerting on the same events with minimal code. Wire it only if you want managed
+  alerting beyond log-drain rules.
+
+## 6. Scaling notes (post-launch)
 
 The MVP is built to run comfortably as a single always-on backend instance. To
 scale horizontally you need the deferred work tracked in `PROJECT_PLAN.md`:
@@ -112,7 +136,7 @@ scale horizontally you need the deferred work tracked in `PROJECT_PLAN.md`:
 - A DB **connection pooler** (PgBouncer / provider pooler) if running many
   replicas.
 
-## 6. GitHub App
+## 7. GitHub App
 
 Follow [`SETUP.md`](./SETUP.md). For production, point the App's callback, setup,
 and webhook URLs at `BACKEND_PUBLIC_URL`, and grant least-privilege permissions:

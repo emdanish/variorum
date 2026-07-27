@@ -81,4 +81,9 @@ class ProviderManager:
                 )
                 errors.append(exc)
 
+        # A single, greppable signal for "AI is fully down" — every configured
+        # provider failed (or none is configured). Alert on this.
+        logger.error(
+            "ai all providers failed purpose=%s tried=%d", purpose, len(errors)
+        )
         raise AllProvidersFailedError(errors)

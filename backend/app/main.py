@@ -148,6 +148,25 @@ def create_app() -> FastAPI:
             ai_providers=ai.active_provider_names,
         )
 
+    @app.get("/health/ready", tags=["system"])
+    def readiness() -> JSONResponse:
+        """Readiness probe for uptime monitors: 200 only when the database is
+        reachable, 503 otherwise (so a plain HTTP check alerts on a DB/backend
+        outage without parsing JSON). `/health` remains the liveness probe."""
+        from sqlalchemy import text
+
+        from app.db.session import engine
+
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("select 1"))
+        except Exception:
+            logger.exception("readiness check failed: database unreachable")
+            return JSONResponse(
+                status_code=503, content={"status": "unavailable", "database": "error"}
+            )
+        return JSONResponse(status_code=200, content={"status": "ok", "database": "ok"})
+
     logger.info(
         "%s API started env=%s ai_providers=%s",
         settings.app_name,

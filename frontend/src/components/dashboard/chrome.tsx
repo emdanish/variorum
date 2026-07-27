@@ -107,10 +107,9 @@ function ErrorScreen() {
       <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-danger/10">
         <AlertTriangle className="h-6 w-6 text-danger" />
       </div>
-      <h1 className="text-xl font-semibold tracking-tight">Can&apos;t reach the backend</h1>
+      <h1 className="text-xl font-semibold tracking-tight">Something went wrong</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        {error || "The API isn't responding."} Make sure it&apos;s running on{" "}
-        <code className="font-mono">http://localhost:8000</code>.
+        {error || "We couldn't load your dashboard right now. Please try again in a moment."}
       </p>
       <Button size="lg" className="mt-6 w-full" onClick={() => void reloadAll()}>
         Try again
