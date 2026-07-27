@@ -16,6 +16,7 @@ import {
 import { ActivityArea, Bars, CHART_COLORS, Donut } from "@/components/dashboard/charts";
 import { NeedsAttention } from "@/components/dashboard/needs-attention";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { UsageCard } from "@/components/dashboard/usage-card";
 import { useDashboard } from "@/components/dashboard/provider";
 import { Badge, severityTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -105,6 +106,8 @@ export default function OverviewPage() {
       </div>
 
       <KnowledgeHealthBand health={health} />
+
+      <UsageCard />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">

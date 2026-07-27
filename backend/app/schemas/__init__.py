@@ -545,6 +545,17 @@ class AskResponse(BaseModel):
     model: str | None = None
 
 
+class UsageResponse(BaseModel):
+    """The signed-in user's AI credit meter for the current window."""
+
+    limit: int
+    used: int
+    remaining: int
+    window_seconds: int
+    resets_at: datetime
+    resets_in_seconds: int
+
+
 class GitHubAppStatus(BaseModel):
     app_id: bool = False
     private_key: bool = False

@@ -62,7 +62,7 @@ backend/app/
   main.py            FastAPI factory (+ security headers, catch-all handler, rate-limit wiring)
   core/              config (pydantic-settings), logging, ratelimit
   db/                engine/session (pooled), declarative base
-  models/            SQLAlchemy models + StrEnum enums (incl. RepositoryGuide)
+  models/            SQLAlchemy models + StrEnum enums (incl. RepositoryGuide, UsageCredit)
   schemas/           Pydantic request/response
   api/routes/        auth, github, repositories, analysis, teams, system, webhooks
   ai/                provider-agnostic AI layer (base, manager, providers/, service, embeddings, rag)
@@ -70,7 +70,7 @@ backend/app/
     github/          App auth, OAuth, REST client, webhook verify, events, installations
     indexer/         tree-sitter code index, doc discovery, doc↔code linker, archive, pipeline
     analysis/        drift, doc_pr, docfix, pr_context, risk, testgen, test_pr
-    knowledge.py, qa.py, symbols.py, documents.py, change_briefing.py, suppressions.py, insights.py, orientation.py, users.py, schedule.py, monitoring.py, pr_comment.py
+    knowledge.py, qa.py, symbols.py, documents.py, change_briefing.py, suppressions.py, insights.py, orientation.py, users.py, schedule.py, monitoring.py, pr_comment.py, credits.py
   workers/           indexing, pr_analysis, risk_analysis, pr_comment, ingest (BackgroundTasks)
 backend/alembic/     migrations         backend/tests/     pytest suite (+ conftest, _fakes)
 backend/scripts/     check_env.py, check_ai.py     backend/Dockerfile + entrypoint.sh
@@ -168,3 +168,4 @@ powershell -ExecutionPolicy Bypass -File scripts/start-all.ps1
 - Shared PG enum in a new table's migration → set `create_type=False`.
 - Free-tier AI keys reject some model names (404) and rate-limit (429/503) — rely on the fallback chain; re-verify models with `check_ai.py`.
 - Don't import `test_*`-named functions into test modules (pytest collects them) — alias.
+- **Per-user AI credits** (`services/credits.py`, `UsageCredit`): the app is **public**, so all tenants share the free-tier AI keys. Each user gets `USER_DAILY_CREDITS` (default 150) AI *actions* per `CREDIT_WINDOW_SECONDS` (24h), rolled lazily on read/spend (no scheduler). Gate an AI endpoint with `Depends(require_credit)` (`api/deps.py`) → 429 when empty; spend on success with `CreditGuard.commit()` (never on AI failure or idempotent reuse). `GET /usage` feeds the topbar pill + Overview card (refreshed via the `variorum:usage-changed` event). Only meter endpoints that truly call the AI (not pr-briefing/pr-comment).

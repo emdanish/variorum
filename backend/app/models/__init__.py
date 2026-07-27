@@ -6,6 +6,7 @@ from app.models.analysis import (
     RiskFinding,
 )
 from app.models.code import CodeSymbol, DocCodeLink, Document
+from app.models.credit import UsageCredit
 from app.models.decision import DecisionEntry
 from app.models.enums import (
     DocumentKind,
@@ -57,5 +58,6 @@ __all__ = [
     "RepositoryGuide",
     "RiskFinding",
     "Suppression",
+    "UsageCredit",
     "User",
 ]

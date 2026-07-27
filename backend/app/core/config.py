@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
     scheduler_interval_seconds: int = 900
 
+    # Per-user AI credit meter. Variorum runs on free-tier AI keys shared across
+    # every tenant, so each user gets a generous daily allotment of AI actions
+    # (ask, PR analysis, generated PRs, briefings, orientation). The allotment
+    # refreshes automatically once `credit_window_seconds` elapses.
+    user_daily_credits: int = 150
+    credit_window_seconds: int = 86_400  # 24h
+
     # SQLAlchemy connection pool sizing (per process). Tune against the
     # database's max_connections and the number of running replicas.
     db_pool_size: int = 5

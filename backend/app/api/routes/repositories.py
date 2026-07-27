@@ -9,7 +9,14 @@ from sqlalchemy.orm import Session
 
 from app.ai.base import AllProvidersFailedError
 from app.ai.embeddings import get_embedding_service
-from app.api.deps import get_ai_service, get_current_user, get_db, get_github_auth
+from app.api.deps import (
+    CreditGuard,
+    get_ai_service,
+    get_current_user,
+    get_db,
+    get_github_auth,
+    require_credit,
+)
 from app.api.routes.analysis import finding_to_response
 from app.core.logging import get_logger
 from app.models import (
@@ -218,6 +225,7 @@ def analyze_pr(
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    guard: CreditGuard = Depends(require_credit),
 ) -> AnalyzePrResponse:
     """Run the full PR analysis — documentation drift AND test risk — for a pull
     request. Lets a demo trigger the whole pipeline without an inbound webhook."""
@@ -226,6 +234,7 @@ def analyze_pr(
         run_pr_analysis_job, repo.id, payload.pr_number, head_sha=payload.head_sha
     )
     background_tasks.add_task(run_risk_analysis_job, repo.id, payload.pr_number)
+    guard.commit()
     logger.info("PR analysis (drift+risk) queued repo=%s pr=%s", repo.full_name, payload.pr_number)
     return AnalyzePrResponse(status="queued", repository_id=repo.id, pr_number=payload.pr_number)
 
@@ -237,10 +246,12 @@ def analyze_risk(
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    guard: CreditGuard = Depends(require_credit),
 ) -> AnalyzePrResponse:
     """Assess the test-risk of a pull request's changed source files."""
     repo = _get_owned_repo(db, user.id, repo_id)
     background_tasks.add_task(run_risk_analysis_job, repo.id, payload.pr_number)
+    guard.commit()
     logger.info("risk analysis queued repo=%s pr=%s", repo.full_name, payload.pr_number)
     return AnalyzePrResponse(status="queued", repository_id=repo.id, pr_number=payload.pr_number)
 
@@ -537,6 +548,7 @@ async def generate_decisions(
     repo_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    guard: CreditGuard = Depends(require_credit),
 ) -> list[DecisionResponse]:
     """Synthesize (or refresh) the decision timeline from ingested history."""
     repo = _get_owned_repo(db, user.id, repo_id)
@@ -563,6 +575,7 @@ async def generate_decisions(
         db, repo.id, decisions, provider=provider, model=model,
         embedder=get_embedding_service(),
     )
+    guard.commit()
     return [_decision_to_response(d) for d in decisions_svc.list_decisions(db, repo.id)]
 
 
@@ -753,6 +766,7 @@ async def pr_contradictions(
     pr_number: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    guard: CreditGuard = Depends(require_credit),
 ) -> ContradictionReport:
     """Flag recorded decisions/history that a pull request appears to contradict."""
     if pr_number <= 0:
@@ -800,6 +814,7 @@ async def pr_contradictions(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="AI is unavailable right now. Please try again.",
         ) from exc
+    guard.commit()
     return ContradictionReport(pr_number=pr_number, contradictions=found)
 
 
@@ -844,6 +859,7 @@ async def ask(
     payload: AskRequest,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    guard: CreditGuard = Depends(require_credit),
 ) -> AskResponse:
     """Answer a question about the repository's engineering history, grounded in
     ingested knowledge entries and cited."""
@@ -884,6 +900,7 @@ async def ask(
             detail="AI is unavailable right now. Please try again.",
         ) from exc
 
+    guard.commit()
     return AskResponse(
         answer=result.answer,
         citations=[
@@ -901,6 +918,7 @@ async def change_briefing(
     payload: ChangeBriefingRequest,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    guard: CreditGuard = Depends(require_credit),
 ) -> ChangeBriefing:
     """Pre-work briefing for an intended change: where the code lives, how risky
     it is to touch, who to ask, why it's built that way, which docs will drift,
@@ -920,8 +938,10 @@ async def change_briefing(
         summary, provider = await change_briefing_svc.summarize(ai, briefing)
         briefing["summary"] = summary
         briefing["provider"] = provider
+        guard.commit()
     except (AllProvidersFailedError, ValueError) as exc:
-        # The structured briefing stands on its own; the TL;DR is optional.
+        # The structured briefing stands on its own; the TL;DR is optional — and
+        # a failed TL;DR costs no credit (guard.commit is skipped).
         logger.warning("change-briefing summary failed repo=%s: %s", repo.id, exc)
 
     return ChangeBriefing(**briefing)
@@ -966,6 +986,7 @@ async def generate_orientation(
     repo_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    guard: CreditGuard = Depends(require_credit),
 ) -> RepositoryGuideResponse:
     """Generate (or regenerate) the repository's onboarding guide from its indexed
     code, documentation, and engineering history."""
@@ -1010,6 +1031,7 @@ async def generate_orientation(
     guide = orientation_svc.upsert_guide(
         db, repo.id, summary=summary, content=content, provider=provider, model=model
     )
+    guard.commit()
     logger.info("orientation guide generated repo=%s provider=%s", repo.full_name, provider)
     return _guide_to_response(guide)
 

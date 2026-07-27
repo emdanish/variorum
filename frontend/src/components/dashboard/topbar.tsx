@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { LogOut, Menu, RefreshCw, Search } from "lucide-react";
+import { CreditsPill } from "@/components/dashboard/credits-pill";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { useDashboard } from "@/components/dashboard/provider";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -61,6 +62,8 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
           <span className="hidden sm:inline">Refresh</span>
         </Button>
+
+        <CreditsPill />
 
         <NotificationBell />
 

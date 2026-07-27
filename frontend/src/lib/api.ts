@@ -465,6 +465,26 @@ export interface AskResponse {
   model: string | null;
 }
 
+export interface Usage {
+  limit: number;
+  used: number;
+  remaining: number;
+  window_seconds: number;
+  resets_at: string;
+  resets_in_seconds: number;
+}
+
+/** Event fired after any AI action that spends a credit, so the usage meter in
+ *  the UI can refresh without prop-drilling through every action button. */
+export const USAGE_CHANGED_EVENT = "variorum:usage-changed";
+
+function metered<T>(p: Promise<T>): Promise<T> {
+  return p.then((value) => {
+    if (typeof window !== "undefined") window.dispatchEvent(new Event(USAGE_CHANGED_EVENT));
+    return value;
+  });
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -534,6 +554,7 @@ export const loginUrl = `${BACKEND_URL}/api/v1/auth/github/login`;
 
 export const api = {
   systemStatus: () => request<SystemStatus>("/api/v1/system/status"),
+  usage: () => request<Usage>("/api/v1/usage"),
   me: () => request<User>("/api/v1/auth/me"),
   logout: () => request<void>("/api/v1/auth/logout", { method: "POST" }),
   listTokens: () => request<ApiToken[]>("/api/v1/auth/tokens"),
@@ -559,7 +580,9 @@ export const api = {
   orientation: (id: number) =>
     request<RepositoryGuide>(`/api/v1/repositories/${id}/orientation`),
   generateOrientation: (id: number) =>
-    request<RepositoryGuide>(`/api/v1/repositories/${id}/orientation`, { method: "POST" }),
+    metered(
+      request<RepositoryGuide>(`/api/v1/repositories/${id}/orientation`, { method: "POST" }),
+    ),
   jobs: (id: number) => request<Job[]>(`/api/v1/repositories/${id}/jobs`),
   hotspots: (id: number) => request<Hotspot[]>(`/api/v1/repositories/${id}/hotspots`),
   ownership: (id: number) => request<OwnershipReport>(`/api/v1/repositories/${id}/ownership`),
@@ -568,7 +591,7 @@ export const api = {
   health: (id: number) => request<HealthScore>(`/api/v1/repositories/${id}/health`),
   decisions: (id: number) => request<Decision[]>(`/api/v1/repositories/${id}/decisions`),
   generateDecisions: (id: number) =>
-    request<Decision[]>(`/api/v1/repositories/${id}/decisions`, { method: "POST" }),
+    metered(request<Decision[]>(`/api/v1/repositories/${id}/decisions`, { method: "POST" })),
   prBriefing: (id: number, prNumber: number) =>
     request<PrBriefing>(`/api/v1/repositories/${id}/pr-briefing/${prNumber}`),
   setPrComments: (id: number, enabled: boolean) =>
@@ -607,7 +630,9 @@ export const api = {
     request<void>(`/api/v1/repositories/${id}/alerts/${alertId}/ack`, { method: "POST" }),
   alerts: () => request<Alert[]>("/api/v1/alerts"),
   contradictions: (id: number, prNumber: number) =>
-    request<ContradictionReport>(`/api/v1/repositories/${id}/contradictions/${prNumber}`),
+    metered(
+      request<ContradictionReport>(`/api/v1/repositories/${id}/contradictions/${prNumber}`),
+    ),
   teams: () => request<TeamInsights[]>("/api/v1/teams"),
   portfolio: () => request<Portfolio>("/api/v1/portfolio"),
   experts: (q?: string) =>
@@ -617,7 +642,7 @@ export const api = {
   findings: (repoId: number) =>
     request<Finding[]>(`/api/v1/repositories/${repoId}/findings`),
   openDocFixPr: (findingId: number) =>
-    request<GeneratedPR>(`/api/v1/findings/${findingId}/open-pr`, { method: "POST" }),
+    metered(request<GeneratedPR>(`/api/v1/findings/${findingId}/open-pr`, { method: "POST" })),
   dismissFinding: (findingId: number) =>
     request<Finding>(`/api/v1/findings/${findingId}/dismiss`, { method: "POST" }),
   restoreFinding: (findingId: number) =>
@@ -627,14 +652,20 @@ export const api = {
   restoreRiskFinding: (findingId: number) =>
     request<RiskFinding>(`/api/v1/risk-findings/${findingId}/restore`, { method: "POST" }),
   analyzePr: (repoId: number, prNumber: number) =>
-    request<{ status: string; pr_number: number }>(
-      `/api/v1/repositories/${repoId}/analyze-pr`,
-      { method: "POST", body: JSON.stringify({ pr_number: prNumber }) },
+    metered(
+      request<{ status: string; pr_number: number }>(
+        `/api/v1/repositories/${repoId}/analyze-pr`,
+        { method: "POST", body: JSON.stringify({ pr_number: prNumber }) },
+      ),
     ),
   riskFindings: (repoId: number) =>
     request<RiskFinding[]>(`/api/v1/repositories/${repoId}/risk-findings`),
   generateTests: (findingId: number) =>
-    request<GeneratedPR>(`/api/v1/risk-findings/${findingId}/generate-tests`, { method: "POST" }),
+    metered(
+      request<GeneratedPR>(`/api/v1/risk-findings/${findingId}/generate-tests`, {
+        method: "POST",
+      }),
+    ),
   ingestHistory: (repoId: number) =>
     request<{ status: string; repository_id: number }>(
       `/api/v1/repositories/${repoId}/ingest-history`,
@@ -643,13 +674,17 @@ export const api = {
   knowledgeStats: (repoId: number) =>
     request<KnowledgeStats>(`/api/v1/repositories/${repoId}/knowledge/stats`),
   ask: (repoId: number, question: string) =>
-    request<AskResponse>(`/api/v1/repositories/${repoId}/ask`, {
-      method: "POST",
-      body: JSON.stringify({ question }),
-    }),
+    metered(
+      request<AskResponse>(`/api/v1/repositories/${repoId}/ask`, {
+        method: "POST",
+        body: JSON.stringify({ question }),
+      }),
+    ),
   changeBriefing: (repoId: number, query: string) =>
-    request<ChangeBriefing>(`/api/v1/repositories/${repoId}/change-briefing`, {
-      method: "POST",
-      body: JSON.stringify({ query }),
-    }),
+    metered(
+      request<ChangeBriefing>(`/api/v1/repositories/${repoId}/change-briefing`, {
+        method: "POST",
+        body: JSON.stringify({ query }),
+      }),
+    ),
 };

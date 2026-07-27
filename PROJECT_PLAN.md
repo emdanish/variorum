@@ -868,6 +868,21 @@ production build passes (13 routes). All resources remain ownership-scoped; the
 human-review gate and $0 constraint are preserved (Slack incoming webhooks and
 the AI free-tier fallback add no cost).
 
+- **Per-user AI credit meter (multi-tenant guard):** now that the GitHub App is
+  public, every tenant shares the same free-tier AI keys, so each user gets a
+  generous daily allotment of AI *actions* (`USER_DAILY_CREDITS`, default 150,
+  refreshing every `CREDIT_WINDOW_SECONDS` = 24h). `UsageCredit` (one row per
+  user, migration `d8b3c6a1f9e2`) + `services/credits.py` roll the window lazily
+  on read/spend — no scheduler. A `require_credit` dependency (`api/deps.py`)
+  gates the AI endpoints (ask, analyze-pr/-risk, open-pr, generate-tests,
+  decisions, contradictions, change-briefing, orientation) with a 429 that names
+  the reset time; the endpoint spends the credit via `CreditGuard.commit()` only
+  on a delivered result — an AI outage or an idempotent PR reuse costs nothing.
+  `GET /usage` exposes the balance; the frontend shows it as a topbar pill and an
+  Overview usage card, auto-refreshed via a `variorum:usage-changed` event fired
+  after each metered action. Deterministic endpoints (pr-briefing, pr-comment)
+  are **not** metered — credits track real AI spend only.
+
 ---
 
 ## Knowledge retrieval — embeddings & RAG foundation (complete)

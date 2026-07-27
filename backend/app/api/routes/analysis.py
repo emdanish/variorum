@@ -9,7 +9,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.base import AllProvidersFailedError
-from app.api.deps import get_ai_service, get_current_user, get_db, get_github_auth
+from app.api.deps import (
+    CreditGuard,
+    get_ai_service,
+    get_current_user,
+    get_db,
+    get_github_auth,
+    require_credit,
+)
 from app.core.logging import get_logger
 from app.models import (
     AnalysisJob,
@@ -173,6 +180,7 @@ async def _run_pr_generation(
     finding_id: int,
     log_label: str,
     none_detail: str,
+    guard: CreditGuard | None = None,
 ) -> GeneratedPRResponse:
     """Await a PR-creation coroutine and map its failures to clean HTTP errors.
     Shared by the doc-fix and test-generation endpoints."""
@@ -197,6 +205,10 @@ async def _run_pr_generation(
 
     if result is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=none_detail)
+    # Charge a credit only when AI actually generated a PR — not when an existing
+    # PR was reused (idempotent replay), which does no AI work.
+    if guard is not None and not result.reused:
+        guard.commit()
     return GeneratedPRResponse(
         id=result.generated_pr_id,
         finding_id=finding_id,
@@ -213,6 +225,7 @@ async def open_doc_fix_pr(
     finding_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    guard: CreditGuard = Depends(require_credit),
 ) -> GeneratedPRResponse:
     finding = _owned_finding(db, user.id, finding_id)
     if finding.status == FindingStatus.dismissed:
@@ -231,6 +244,7 @@ async def open_doc_fix_pr(
         finding_id=finding.id,
         log_label="doc-fix",
         none_detail="No documentation change was generated for this finding.",
+        guard=guard,
     )
 
 
@@ -252,6 +266,7 @@ async def generate_tests(
     finding_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    guard: CreditGuard = Depends(require_credit),
 ) -> GeneratedPRResponse:
     finding = _owned_risk_finding(db, user.id, finding_id)
     if finding.status == "dismissed":
@@ -267,6 +282,7 @@ async def generate_tests(
         finding_id=finding.id,
         log_label="test-gen",
         none_detail="No tests were generated for this finding.",
+        guard=guard,
     )
 
 
